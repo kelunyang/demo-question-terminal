@@ -1,0 +1,45 @@
+# ── 機密 / 憑證 ──────────────────────────────────
+# 絕對不要進 repo：API 金鑰、登入 token
+.env
+.env.*
+*.env
+.dev.vars
+.dev.vars.*
+gas/.clasprc.json
+.clasprc.json
+
+# ── 相依套件 / 虛擬環境 ─────────────────────────────
+node_modules/
+data-pipeline/.venv/
+.venv/
+venv/
+
+# ── Python ─────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# ── Cloudflare Worker ──────────────────────────
+worker/.wrangler/
+.wrangler/
+
+# ── 本機工具設定 ────────────────────────────────
+.claude/settings.local.json
+
+# ── TNSS 調查資料（有再散布限制，不進 repo）──────────────
+# 原始 .sav 與其衍生的 harmonized .xlsx 都是「逐筆受訪者微觀資料」，受 Duke TNSS
+# 資料使用規範約束，不可公開再散布。使用者請自行向 Duke 取得 .sav 放進 raw/，
+# 再跑 data-pipeline/build_excel.py 產生 xlsx（見 data-pipeline/README.md）。
+# 只保留轉換程式，不保留資料本身。
+data-pipeline/raw/
+data-pipeline/TNSS_harmonized.xlsx
+
+# ── 作業系統 / 編輯器雜項 ────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/

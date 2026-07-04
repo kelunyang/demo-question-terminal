@@ -1,0 +1,17 @@
+name = "waishengren-deepseek-proxy"
+main = "src/index.js"
+compatibility_date = "2026-07-01"
+
+[observability]
+enabled = true
+
+# 每個來源 IP 每 60 秒最多 30 次請求（period 只能是 10 或 60）。
+# 這是「即使前端 token 外洩也鎖住傷害上限」的那道防線；namespace_id 是這條規則的識別碼，
+# 同一個 Worker 內只要唯一即可。程式端以 env.RATE_LIMITER.limit({key}) 呼叫。
+[[ratelimits]]
+name = "RATE_LIMITER"
+namespace_id = "1001"
+
+  [ratelimits.simple]
+  limit = 30
+  period = 60

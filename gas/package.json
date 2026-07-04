@@ -1,0 +1,15 @@
+{
+  "name": "gas",
+  "version": "1.0.0",
+  "description": "「外省人在想什麼」的 Google Apps Script Web App：`Code.gs`（後端）+ `Index.html`（Vue 前端，由 HtmlService 服務）。",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@google/clasp": "^3.3.0"
+  }
+}

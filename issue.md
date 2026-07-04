@@ -1,0 +1,145 @@
+# 踩坑紀錄（issue.md）
+
+> 記錄開發過程中遇到的非顯而易見的 bug／設計失誤，及最終修法。目的是避免以後重蹈覆轍，也讓其他協作者快速理解「為什麼現在的做法長這樣」。依發生時間排序。
+
+---
+
+## 1. GAS `UrlFetchApp` 無法穩定繞過逾時，AI 呼叫整個搬離 GAS
+
+**症狀**：DeepSeek 回應時間較長時，GAS 端固定在約 30 秒左右被截斷，即使明確設定 `UrlFetchApp.fetch(url, { timeoutSeconds: 150 })`，官方文件宣稱預設 360 秒也沒用。
+
+**根因**：GAS `UrlFetchApp` 有實務上無法透過參數穩定繞過的逾時限制；且 GAS 完全不支援讀取真正的 SSE 串流（只能拿到完整回應後的一整包 body），無法做到逐 token 顯示。
+
+**修法**：架構整個重構——GAS（`Code.gs`）只保留 Google Sheet 資料存取，AI 呼叫全部搬到前端瀏覽器直連一個獨立部署的 Cloudflare Worker（`worker/src/index.js`），Worker 把 `stream:true` 的請求原封不動轉發 DeepSeek 的 SSE response body，前端用 `fetch()` + `response.body.getReader()` 逐段讀取解析，達成真正的 token 級串流。DeepSeek API Key 存在 Worker 的 secret，不落地前端也不落地 GAS。
+
+**教訓**：GAS 不適合做任何「呼叫方需要長時間等待或串流回應」的代理工作；這類需求應該一開始就用 Cloudflare Worker/Vercel Edge Function 之類原生支援串流的平台。
+
+---
+
+## 2. DeepSeek 把「思考過程」寫進 `content` 而非 `reasoning_content`，導致可見文字被 `max_tokens` 攔腰截斷
+
+**症狀**：出題結果偶爾顯示一大段英文夾雜中文的碎念（"Let me analyze the data... let me count characters..."），而且文字在句子中間硬生生停住。
+
+**根因**：`deepseek-v4-flash` 有時不會乖乖把內部推理放進 `reasoning_content` 欄位，而是直接寫進使用者看得到的 `content`；如果這段碎念又臭又長，很容易在還沒寫到正式答案前就撞上 `max_tokens` 上限，截斷點看起來就像「連線被切斷」。
+
+**修法**：`extractCodeBlock()` 保底機制——不管模型是否遵守指示，一律要求把「最終要交付的內容」包進一個 Markdown code block，前端無論如何都只取最後一個 code block 的內容顯示，找不到才退回顯示整段原始文字。這是結構性防呆，不依賴模型自律。
+
+---
+
+## 3. 「選項字數必須完全相同」的出題限制，誘發模型放棄用工具、改用文字碎念驗證，燒光 token
+
+**症狀**：出題結果持續出現第 2 點的碎念截斷症狀，即使已經有 `extractCodeBlock()` 保底。
+
+**根因**：原本設計選擇題要「所有選項字數完全相同」（避免字數差異洩漏答案），並提供 `countChars` 工具讓模型呼叫來驗證——但模型常常不呼叫工具，改成在可見文字裡手動一個字一個字算，反覆修改選項，把 `max_tokens` 全部燒在這個驗證過程上，導致真正的題目還沒寫出來就被截斷。
+
+**修法**：直接拿掉「選項字數相等」這個需求與 `countChars` 工具。demo 用途不需要這麼講究，比起賭模型會不會乖乖用工具，簡化需求更可靠。
+
+**教訓**：要求 LLM 自我驗證某個精確的數值條件（尤其是「必須完全相等」這種強約束），很容易誘發模型在可見輸出裡碎碎念驗證，即使有提供工具也不保證會用。能用程式碼在生成後驗證/修正，就不要依賴模型自我驗證。
+
+---
+
+## 4. 出題抽屜的「思考中」框沒接上即時串流文字
+
+**症狀**：實作真正的 SSE 串流後，出題**抽屜**裡的等待框仍然整段生成期間都顯示死板的「連線中…」，看起來像是串流沒生效。
+
+**根因**：改真串流時，首頁那個「思考中」框有正確接上 `v-if="genLoading && !reasoningQ"` / `v-else` 切換邏輯，但抽屜裡另一個獨立的等待框只是簡單把文案從「等待中」換成「連線中」，忘記加上「一旦收到 reasoning 就切換顯示」的判斷。
+
+**修法**：幫抽屜裡的框也補上同樣的 `v-if="!reasoningQ"` / `v-else` 切換。
+
+**教訓**：同一個功能（顯示串流思考過程）如果在畫面上有兩個獨立的呈現位置，改動時容易漏掉其中一處；之後應該考慮抽成共用元件/共用邏輯而不是複製貼上兩份模板。
+
+---
+
+## 5. 出題時正確答案直接顯示給作答者看
+
+**症狀**：出題流程等於直接洩題——「正確答案：X」跟著題目一起顯示在畫面上。
+
+**根因**：最初設計只想著「怎麼讓模型可靠決定答案」，沒注意到這行文字沒有被從顯示內容裡拆掉。
+
+**修法**：`splitAnswerKey()`——用正則把題目文字裡「正確答案：X」那一行拆出來，不顯示的部分存進隱藏的 `quiz.answerKey`，送出批改時才連同題目、作答一起交給 AI 比對。
+
+**教訓**：任何「AI 生成的內容裡混有不該給使用者看到的資訊」的情境（正確答案、內部評分依據……），都應該用結構化拆分把它從顯示層徹底移除，而不是指望 prompt 說「不要顯示」就真的不會顯示。
+
+---
+
+## 6. 選擇題用通用文字框作答，而非真正的單選介面
+
+**症狀**：四選一選擇題只能用一個文字框讓使用者手動打字回答，不是點選 A/B/C/D。
+
+**根因**：最初圖方便，出題與作答共用同一套「Markdown 顯示＋文字框」流程，沒有特別解析出選項結構。
+
+**修法**：`parseAndStripOptions()`（AI 出題用，要求選項有 `A.`/`B.` 前綴）與 `parseMarkdownListOptions()`（老師出題用，允許純 Markdown 清單、依序自動配字母）把選項從題目文字中解析、拆出，改用 `el-radio-group` 讓使用者真正點選。
+
+---
+
+## 7. 自訂元素用 `/>` 自我封閉，導致同類型元素巢狀在一起、大部分選項形同消失（本次最大的一個坑）
+
+**症狀**：兩個「題型」`el-select` 下拉選單裡，四個選項只有最後一個（「問答題」）能被選到，其餘三個像是不存在；同樣手法也悄悄弄壞了老師出題流程裡作答框後面緊接的 AI 審題建議區塊（內容被吃掉、完全不渲染）。
+
+**根因**：本專案是「in-DOM template」——Vue 直接掛載在頁面既有 HTML 上，沒有建置流程、沒有 `.vue` 單檔元件。**瀏覽器原生 HTML 解析器不支援自訂元素用 `/>` 自我封閉**：`<el-option ... />` 這種寫法，原生解析器會直接忽略結尾的 `/`，導致這個標籤持續「開著」，後面緊接的兄弟標籤全部被誤判成它的子節點、一路巢狀嵌套下去，直到遇到父層的結束標籤才整串收合。這是 Vue 官方文件明確警告過的「in-DOM template parsing caveats」，但因為多數自我封閉元素剛好是某個容器唯一的子節點（後面緊接父層的結束標籤），native parser 的「遇到不匹配的結束標籤時往回收合」機制意外讓它們表現正常，只有「同一層有多個同類型元素緊鄰當兄弟節點」（例如四個 `<el-option>`）才會整組炸開。
+
+**修法**：全檔掃描找出所有自我封閉的自訂元素（`el-option`/`el-input`/`el-segmented`/`el-empty`，共 20 處），機械式全部轉成明確的開合標籤 `<tag ...></tag>`。
+
+**教訓（最重要的一條）**：這個專案任何自訂元素（`el-*`）**一律不要用 `/>` 自我封閉，一律寫明確的 `</tag>`**，尤其是會有多個同類型元素緊鄰當兄弟節點的情況（`el-option`、`el-radio`、`el-checkbox` 之類）風險最高，務必養成習慣。
+
+---
+
+## 8. Vue reactivity：push 進 reactive 陣列後，繼續拿 push 前的原始物件參照做修改，導致畫面卡在「審題中」不更新
+
+**症狀**：老師出題送出後，AI 審題建議一直卡在「審題中…」不會消失；但等到出下一題（把新項目 push 進同一個陣列）之後，上一題早就跑完的審題結果卻「順便」跳出來了。
+
+**根因**：`submitTeacherQuiz()` 建構一個純 JS 物件 `item`，`push` 進 `state.quiz.items`（reactive 陣列）之後，卻繼續拿這個 **push 前的原始物件參照**傳給 `runTeacherReview(item)` 做後續非同步修改（`teacherReviewLoading`/`teacherReview` 等欄位）。問題是：物件 push 進 reactive 陣列後，畫面實際渲染、Vue 追蹤依賴的是陣列裡那個被 Vue 包好的 **reactive proxy**，不是這個原始物件本身——對原始物件的修改完全不會觸發任何重繪。畫面因此卡住，直到**別的**響應式操作（出下一題，對陣列做 `push`）順帶觸發整個 timeline 重新渲染，才「順便」把老早就跑完、只是從來沒被渲染出來的結果一併撈出來顯示。
+
+**修法**：`push` 之後立刻用 `state.quiz.items[state.quiz.items.length - 1]` 重新從陣列裡取出 reactive 元素，後續一律對這個參照做修改，不要沿用 push 前的變數。
+
+**教訓**：任何「先建構一個物件、push 進 reactive 容器、然後還要繼續非同步修改這個物件欄位」的模式都要小心——一定要重新從 reactive 容器裡取出參照再改。`v-for` 迭代 reactive 陣列時模板拿到的元素沒有這個問題（本來就是 reactive proxy），只有「自己手上還留著 push 前的舊變數」這個模式會中招。
+
+---
+
+## 9. 五處 AI 呼叫都可能「只回思考過程、沒有實際結果」而沒有明顯提示
+
+**症狀**：`content` 為空但 `reasoning_content` 非空時（模型只輸出思考過程、可能被截斷或沒收斂出結論），畫面要嘛顯示空白、要嘛被預設文字蓋掉，使用者不容易發現「這次其實沒有真的拿到結果」。
+
+**修法**：在 `describeChart`/`generateQuiz`/`gradeQuiz`/Insight 助手/老師出題審題五個地方統一偵測這個情境，顯示明確的警示區塊＋「重新查詢 AI」按鈕，而不是靜默顯示空白。
+
+---
+
+## 10. `@click="doGradeQuiz"`（沒加括號）把原生 `MouseEvent` 當成參數傳進去，存檔時序列化失敗
+
+**症狀**：儲存測驗記錄時跳出「儲存失敗：Failed due to illegal value in property: grade_feedback」。
+
+**根因**：`doGradeQuiz(feedback)` 設計成可選擇性接收一個「老師給的批改意見」字串（用於「給意見，請 AI 再批改一次」那個功能），並存進 `state.quiz.lastGradeFeedback`。但「送出批改」按鈕跟「重新查詢 AI」按鈕都寫成 `@click="doGradeQuiz"`——**沒有加括號**。Vue 模板編譯器看到這種「裸露的函式參照」寫法，會把原生的 click `MouseEvent` 物件當成第一個參數自動傳進去；也就是說，只要是從這兩顆按鈕觸發（並非走「給意見重來」那條路徑），`feedback` 收到的其實是一個瀏覽器原生事件物件，而不是 `undefined`。`state.quiz.lastGradeFeedback = feedback || ''` 因為事件物件是 truthy，就把整個含有大量循環參照與 DOM 節點的事件物件存了起來；等到 `saveQuizResult()` 把它塞進 `record.grade_feedback` 送給 GAS 後端時，Google 的序列化機制當然無法處理，丟出「illegal value」錯誤。
+
+**修法**：`doGradeQuiz` 一開始就做型別防呆：`feedback = typeof feedback === 'string' ? feedback : '';`，不管呼叫來源傳了什麼奇怪的東西進來，都先確定是字串才使用。
+
+**教訓**：**任何函式如果設計成「可以被 `@click="fn"`（無括號、沒有明確傳參數）直接綁定，同時又接受一個有意義的參數」，這個參數在某些觸發路徑上一定會收到原生的 DOM 事件物件而不是預期的值**——要嘛在函式一開始就對參數做型別檢查／防呆，要嘛乾脆確保所有呼叫端都明確帶括號傳參數（`@click="fn(x)"` 或 `@click="fn()"`），不要讓同一個函式同時有「裸露綁定」跟「帶參數呼叫」兩種呼叫方式並存。
+
+---
+
+## 11. 前端直連 Worker 代理的共用 token 是公開的，proxy 有被爬蟲／盜用燒 API 額度的風險
+
+**症狀**：AI 呼叫改成前端直連 Cloudflare Worker（見第 1 條）後，Worker 用 `X-App-Token` 共用 token 擋未授權請求。但這個 token 寫在 GAS 公開網頁的 `Index.html` 裡（`APP_SHARED_TOKEN`），任何人 `view-source` 就拿得到；加上 CORS 開 `*`，等於誰都能無限打這個 proxy 燒掉 DeepSeek 額度。
+
+**根因**：只要前端是公開網頁，任何送到瀏覽器的「機密」都會外洩——client-side 的 token 本質上防不了刻意濫用，最多防隨手/爬蟲。原本註解其實也寫了「非機密，僅防呆」，但沒有第二道防線兜底。
+
+**修法**：在 `worker/src/index.js` 加兩道防線（規格見 `specupgrade.md` 第 9 節）：(1) **Origin 白名單**——只放行 `Origin` 字尾為 `.googleusercontent.com`／`script.google.com` 的請求（GAS 沙箱 iframe 的 origin 是浮動 hash 的 `n-…-script.googleusercontent.com`，**必須字尾比對不能寫死**），用 `ENFORCE_ORIGIN` 旗標先「只記錄不阻擋」觀察到真實 origin、確認後才開啟阻擋，CORS 也從 `*` 收成只 echo 白名單 origin；(2) **每 IP rate limit** 30 次/60 秒（Workers 原生 `[[ratelimits]]` binding，fail-open 設計）。
+
+**上線手法（值得複用）**：改動涉及「猜錯就把整個 app 打掛」的 Origin 判斷時，先部署一版 `ENFORCE_ORIGIN=false`（只 `console.log`），用 `wrangler tail` 抓真實 request 的 Origin，確認白名單命中後再翻成 `true` 部署——不要憑猜測直接開阻擋。
+
+**教訓**：
+- **前端能拿到的東西一律視為公開**，token/API key 放在瀏覽器就等於外洩；代理服務的防護要建立在「即使 token 外洩也能限制傷害」之上（Origin 過濾擋隨手/爬蟲、rate limit 鎖速率上限、上游帳號消費上限鎖金額地板），而不是指望那個 token。
+- **`Origin` header 只擋得了瀏覽器**：非瀏覽器 client（curl/腳本）可任意偽造 Origin，所以 Origin 白名單擋不住「刻意複製 token + 偽造 Origin」的人——最終的財務保險絲是 **DeepSeek 帳號的消費上限**（務必設），Origin/rate limit 只是把門檻與速率拉高。
+- **限流/防護邏輯本身要 fail-open**：限流 binding 沒設定或異常時應放行而非 500，否則防護本身變成把正常使用者擋死的故障點。
+- **Turnstile 這類「真人驗證」在 GAS 沙箱裡不可行**（浮動 googleusercontent origin ＋ 沙箱內再嵌跨網域 challenge iframe ＋ CSP/第三方 storage 限制）；要真人驗證得先把前端搬離 GAS（例如 Cloudflare Pages）。
+
+---
+
+## 共通教訓
+
+- **這是一個沒有建置流程的 in-DOM template 專案**：任何看起來「應該沒問題」的 HTML/Vue 寫法，都要考慮「瀏覽器原生 HTML 解析器會怎麼解讀這段字串」，不能只用 Vue SFC 的直覺去想。
+- **依賴 LLM 自我驗證精確條件（字數相等、格式完全正確）非常不可靠**，能在生成後用程式碼驗證/修正，就不要靠 prompt 指令硬要求模型自律。
+- **任何要顯示給使用者的 AI 生成內容，若混有不該曝光的資訊（答案、內部依據），要用結構化拆分處理**，不能只靠 prompt 說「不要顯示」。
+- **同一個功能如果有多處呈現位置（例如兩個等待動畫框），修改時容易漏掉其中一處**，複製貼上的模板要格外小心保持同步。
+- **Vue reactivity 只追蹤透過 reactive proxy 的存取**，任何「先建構物件、push 進陣列、之後還要繼續修改」的模式，都要重新從 reactive 容器裡把參照拿出來，不能沿用 push 前的舊變數。
+- **`@click="fn"`（無括號）會把原生 DOM 事件物件當第一個參數傳給 `fn`**：任何會被這樣裸露綁定的函式，只要同時接受有意義的參數，一定要在函式內對參數做型別防呆，不能假設沒傳參數時一定是 `undefined`。
+- **前端能拿到的東西一律視為公開**（token、API key、共用密鑰）：對外代理服務的防護要建立在「即使前端密鑰外洩也能限制傷害」之上——Origin 白名單擋隨手/爬蟲、rate limit 鎖速率、上游帳號消費上限鎖金額，並記得 `Origin` 可被非瀏覽器偽造、防護邏輯本身要 fail-open。

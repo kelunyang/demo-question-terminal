@@ -1,0 +1,5 @@
+# 只推送這三個檔案，其餘全部忽略
+**/**
+!Code.gs
+!Index.html
+!appsscript.json
