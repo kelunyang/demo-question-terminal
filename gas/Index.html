@@ -188,14 +188,14 @@
     font-family: inherit; font-size: 12px; padding: 2px 10px; border-radius: 2px; cursor: pointer; }
   .term-foot button:hover { color: var(--term-fg); border-color: var(--term-dim); }
   .term-foot .spacer { flex: 1; }
-  .term-foot .credit { color: var(--term-faint); white-space: nowrap; }
-  .term-foot .credit a { color: var(--term-dim); text-decoration: none; }
-  .term-foot .credit a:hover { color: var(--term-fg); }
+  /* 終端機標題列署名 */
+  .term-head .credit { color: var(--term-faint); font-size: 11px; }
+  .term-head .credit a { color: var(--term-dim); text-decoration: none; }
+  .term-head .credit a:hover { color: var(--term-fg); }
 
-  /* 傳統板頁尾署名 */
-  .app-credit { text-align: center; color: #b0b3b8; font-size: 12px; padding: 20px 0 26px; }
-  .app-credit a { color: #909399; text-decoration: none; }
-  .app-credit a:hover { color: #606266; text-decoration: underline; }
+  /* 傳統板資料來源列署名 */
+  .source-link .credit a { color: #909399; text-decoration: none; }
+  .source-link .credit a:hover { color: #606266; text-decoration: underline; }
 
   /* 開機動畫 */
   .term-boot { position: fixed; inset: 0; background: #000; color: var(--term-fg); z-index: 60;
@@ -370,6 +370,7 @@
     <div class="source-link">
       資料來源：<a :href="sourceUrl" target="_blank">Taiwan National Security Survey (Duke University)</a>
       · 族群以「父親省籍」為代理變項，非受訪者自陳認同。
+      <span class="credit">· © Kelunyang@2026 · <a href="https://github.com/kelunyang/demo-question-terminal" target="_blank" rel="noopener">github.com/kelunyang/demo-question-terminal</a></span>
     </div>
   </div>
 
@@ -609,9 +610,6 @@
         @click="sendInsight"><i class="fa-solid fa-paper-plane"></i></el-button>
     </div>
   </div>
-    <footer class="app-credit">
-      © Kelunyang@2026 · <a href="https://github.com/kelunyang/demo-question-terminal" target="_blank" rel="noopener">github.com/kelunyang/demo-question-terminal</a>
-    </footer>
   </div>
   <!-- ===================== /傳統板 ===================== -->
 
@@ -619,7 +617,7 @@
   <div class="term" v-if="uiMode==='terminal'">
     <div class="term-scan" aria-hidden="true"></div>
     <div class="term-head">
-      <span><span class="dot">●</span>&nbsp; TNSS-TERMINAL · 台灣的族群政治</span>
+      <span><span class="dot">●</span>&nbsp; TNSS-TERMINAL · 台灣的族群政治 <span class="credit">· © Kelunyang@2026 · <a href="https://github.com/kelunyang/demo-question-terminal" target="_blank" rel="noopener">github.com/kelunyang/demo-question-terminal</a></span></span>
       <span><i class="fa-solid fa-cog" @click="openSettings" title="設定"></i></span>
     </div>
 
@@ -824,9 +822,8 @@
       <button @click="exportExcel" title="把整段對話過程輸出成 Excel"><i class="fa-solid fa-file-excel"></i> 輸出對話過程</button>
       <button @click="exportSvg" title="輸出目前最新一張圖表"><i class="fa-solid fa-image"></i> 輸出圖表 SVG</button>
       <button @click="restartTerm" title="清空目前對話、從頭開始一輪"><i class="fa-solid fa-rotate-left"></i> 重新開始</button>
-      <button @click="toggleUiMode"><i class="fa-solid fa-repeat"></i> 切換顯示模式</button>
       <span class="spacer"></span>
-      <span class="credit">© Kelunyang@2026 · <a href="https://github.com/kelunyang/demo-question-terminal" target="_blank" rel="noopener">github.com/kelunyang/demo-question-terminal</a></span>
+      <button @click="toggleUiMode"><i class="fa-solid fa-repeat"></i> 切換顯示模式</button>
     </div>
   </div>
   <!-- ===================== /終端機版 ===================== -->
