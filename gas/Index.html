@@ -256,8 +256,10 @@
   .tmenu { margin: 2px 0 4px; }
   .tmenu-opt { cursor: pointer; padding: 3px 8px; border-radius: 2px; display: block; color: var(--term-fg);
     transition: background .1s, box-shadow .1s; }
-  .tmenu-opt:hover { background: rgba(51,255,102,.14); box-shadow: 0 0 6px rgba(51,255,102,.2); }
+  .tmenu-opt:hover:not(.disabled) { background: rgba(51,255,102,.14); box-shadow: 0 0 6px rgba(51,255,102,.2); }
   .tmenu-opt.sel { background: rgba(51,255,102,.18); box-shadow: 0 0 8px rgba(51,255,102,.35); }
+  .tmenu-opt.disabled { cursor: not-allowed; opacity: .6; }
+  .tmenu-opt.disabled.sel { background: rgba(51,255,102,.12); opacity: .8; }
   .tmenu-opt .k { color: var(--term-amber); margin-right: 8px;
     text-shadow: 0 0 3px rgba(255,176,0,.4); }
 
@@ -963,9 +965,13 @@
               </div>
               <div v-if="ln.teacherMade && ln.review && ln.showReview" class="tthink md" v-html="md(ln.review)"></div>
               <div v-if="ln.teacherMade && ln.reviewLoading" class="tthink">🤖 審題中… {{ ln.reviewReasoning }}</div>
-              <el-radio-group v-if="ln.options" v-model="ln.answer" :disabled="ln.answered" class="quiz-options" style="margin-top:8px">
-                <el-radio v-for="o in ln.options" :key="o.label" :value="o.label">{{ o.label }}. {{ o.text }}</el-radio>
-              </el-radio-group>
+              <div v-if="ln.options" class="tmenu" style="margin-top:8px">
+                <div class="tmenu-opt" v-for="o in ln.options" :key="o.label"
+                  :class="{sel: ln.answer === o.label, disabled: ln.answered}"
+                  @click="!ln.answered && (ln.answer = o.label)">
+                  <span class="k">[{{ o.label }}]</span>{{ o.text }}
+                </div>
+              </div>
               <el-input v-else v-model="ln.answer" :disabled="ln.answered" type="textarea" :rows="3"
                 style="margin-top:8px" placeholder="請在此作答" />
             </div>
