@@ -105,6 +105,7 @@
 
   /* ==========================================================
      終端機版（uiMode==='terminal'）— 老式 IBM 終端機 × Claude Code 線性 log 美學
+     完整 CRT 效果：掃描線、暈邊、磷光 glow、RGB 色散、雜訊、螢幕抖動
      ========================================================== */
   :root {
     --term-bg: #0a0f0a; --term-fg: #33ff66; --term-dim: #1f8a3d; --term-faint: #14612a;
@@ -115,7 +116,9 @@
     position: fixed; inset: 0; background: var(--term-bg); color: var(--term-fg);
     font-family: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Menlo, monospace;
     font-size: 14.5px; line-height: 1.65; display: flex; flex-direction: column;
-    overflow: hidden; text-shadow: 0 0 2px rgba(51,255,102,.45); z-index: 40;
+    overflow: hidden; z-index: 40;
+    /* 磷光管 glow：多層 text-shadow 模擬暈開效果 */
+    text-shadow: 0 0 1px #33ff66, 0 0 2px rgba(51,255,102,.7), 0 0 6px rgba(51,255,102,.4), 0 0 12px rgba(51,255,102,.15);
     /* 把 Element Plus 的主色整組換成磷光綠，讓所有 EP 元件（segmented / checkbox-button /
        select / button 的選中、hover、focus 態）native 就是綠色，不用逐一 hack */
     --el-color-primary: #33ff66;
@@ -130,28 +133,85 @@
     --el-color-success-light-5: #1a9938;
     --el-color-success-light-7: rgba(51,255,102,.32);
     --el-color-success-light-9: rgba(51,255,102,.12);
+    /* 偶發螢幕抖動 */
+    animation: term-jitter 12s infinite;
   }
-  /* CRT 掃描線 + 暈邊，覆蓋整個終端機、不擋互動 */
+  /* CRT 掃描線 + 閃爍 */
   .term::before {
     content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 5;
-    background: repeating-linear-gradient(to bottom, rgba(0,0,0,0) 0, rgba(0,0,0,0) 2px, rgba(0,0,0,.18) 3px, rgba(0,0,0,0) 4px);
+    background: repeating-linear-gradient(to bottom, rgba(0,0,0,0) 0, rgba(0,0,0,0) 2px, rgba(0,0,0,.22) 3px, rgba(0,0,0,0) 4px);
     animation: term-flicker 5.5s infinite steps(60);
   }
+  /* CRT 暈邊 + 玻璃反射光暈 */
   .term::after {
     content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 5;
-    background: radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(0,0,0,.55) 100%);
+    background:
+      radial-gradient(ellipse at center, rgba(0,0,0,0) 50%, rgba(0,0,0,.6) 100%),
+      linear-gradient(165deg, rgba(255,255,255,.04) 0%, transparent 35%);
   }
-  @keyframes term-flicker { 0%,97%{opacity:1} 98%{opacity:.82} 99%{opacity:.95} 100%{opacity:1} }
-  @media (prefers-reduced-motion: reduce) { .term::before { animation: none; } }
+  @keyframes term-flicker { 0%,97%{opacity:1} 98%{opacity:.78} 99%{opacity:.92} 100%{opacity:1} }
+  /* 螢幕偶發抖動：模擬老舊 CRT 的磁場干擾 */
+  @keyframes term-jitter {
+    0%, 96%, 100% { transform: translate(0,0) skewX(0); }
+    96.5% { transform: translate(-1px, 0) skewX(-0.1deg); }
+    97% { transform: translate(1px, -1px) skewX(0.15deg); }
+    97.5% { transform: translate(0, 1px) skewX(-0.05deg); }
+    98% { transform: translate(0,0) skewX(0); }
+  }
+  @media (prefers-reduced-motion: reduce) { .term::before, .term { animation: none; } }
+
+  /* RGB 色散效果：模擬 CRT 的紅綠藍像素錯位 */
+  .term-log {
+    text-shadow:
+      -0.4px 0 0 rgba(255,60,60,.12),
+      0.4px 0 0 rgba(60,255,255,.12),
+      0 0 1px #33ff66, 0 0 3px rgba(51,255,102,.5), 0 0 8px rgba(51,255,102,.2);
+  }
+
+  /* 雜訊覆蓋層 */
+  .term-noise {
+    position: absolute; inset: 0; pointer-events: none; z-index: 4;
+    opacity: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    mix-blend-mode: overlay;
+    animation: term-noise-flicker 8s infinite steps(10);
+  }
+  @keyframes term-noise-flicker {
+    0%, 92%, 100% { opacity: 0; }
+    93% { opacity: .08; background-position: 0 0; }
+    94% { opacity: .12; background-position: -10px 5px; }
+    95% { opacity: .06; background-position: 15px -8px; }
+    96% { opacity: .1; background-position: -5px 12px; }
+    97% { opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) { .term-noise { display: none; } }
+
+  /* 水平撕裂線：偶發的訊號干擾 */
+  .term-tear {
+    position: absolute; left: 0; right: 0; height: 2px; pointer-events: none; z-index: 6;
+    background: linear-gradient(90deg, transparent 0%, rgba(51,255,102,.6) 20%, rgba(255,255,255,.3) 50%, rgba(51,255,102,.6) 80%, transparent 100%);
+    opacity: 0;
+    animation: term-tear 15s infinite;
+  }
+  @keyframes term-tear {
+    0%, 94%, 100% { opacity: 0; top: 30%; }
+    95% { opacity: .7; top: 32%; transform: scaleX(1.02); }
+    95.5% { opacity: .5; top: 65%; }
+    96% { opacity: .8; top: 67%; transform: scaleX(0.98); }
+    96.5% { opacity: 0; top: 68%; }
+  }
+  @media (prefers-reduced-motion: reduce) { .term-tear { display: none; } }
 
   .term-head {
     flex: none; display: flex; align-items: center; justify-content: space-between;
     padding: 6px 14px; border-bottom: 1px solid var(--term-faint); font-size: 12.5px; color: var(--term-dim);
     letter-spacing: .5px; z-index: 6;
+    text-shadow: 0 0 2px rgba(51,255,102,.3);
   }
-  .term-head .dot { color: var(--term-fg); }
-  .term-head i { cursor: pointer; padding: 4px; }
-  .term-head i:hover { color: var(--term-fg); }
+  .term-head .dot { color: var(--term-fg); text-shadow: 0 0 3px rgba(51,255,102,.6), 0 0 8px rgba(51,255,102,.3); }
+  .term-head i { cursor: pointer; padding: 4px; transition: text-shadow .15s; }
+  .term-head i:hover { color: var(--term-fg); text-shadow: 0 0 4px rgba(51,255,102,.6); }
 
   .term-log { flex: 1; overflow-y: auto; padding: 16px 18px 8px; z-index: 6; scroll-behavior: smooth; }
   .term-log::-webkit-scrollbar { width: 8px; }
@@ -163,7 +223,11 @@
   .tline.role-user .pfx { color: var(--term-user); }
   .tline.role-sys .pfx { color: var(--term-fg); }      /* ● 純腳本/選單 */
   .tline.role-ai  .pfx { }                               /* 🤖 真呼叫 AI */
-  .tline.role-err { color: #ff6b6b; text-shadow: 0 0 2px rgba(255,80,80,.4); }
+  .tline.role-err { color: #ff6b6b;
+    text-shadow: 0 0 1px #ff6b6b, 0 0 3px rgba(255,80,80,.6), 0 0 8px rgba(255,80,80,.3);
+    animation: err-flicker 2s infinite; }
+  @keyframes err-flicker { 0%,90%,100%{opacity:1} 92%{opacity:.7} 95%{opacity:.9} }
+  @media (prefers-reduced-motion: reduce) { .tline.role-err { animation: none; } }
 
   /* 思考流：呼叫中即時顯示、結束後摺疊成一行 */
   .tthink { border-left: 2px solid var(--term-faint); padding: 2px 0 2px 10px; margin: 0 0 6px;
@@ -173,11 +237,14 @@
 
   /* box-drawing 邊框區塊：圖表 / 選單 / 表單 / 出題 / 批改 */
   .tbox { border: 1px solid var(--term-dim); border-radius: 2px; margin: 4px 0 14px;
-    box-shadow: 0 0 8px rgba(51,255,102,.08) inset; }
+    box-shadow: 0 0 8px rgba(51,255,102,.08) inset, 0 0 1px rgba(51,255,102,.3); }
   .tbox-title { border-bottom: 1px solid var(--term-faint); padding: 4px 10px; font-size: 12.5px;
-    color: var(--term-dim); letter-spacing: .5px; }
+    color: var(--term-dim); letter-spacing: .5px;
+    text-shadow: 0 0 2px rgba(51,255,102,.3); }
   .tbox-body { padding: 10px 12px; }
   .tbox.egg-fly { will-change: transform, opacity; }
+  /* 焦點時邊框發光 */
+  .tbox:focus-within { box-shadow: 0 0 8px rgba(51,255,102,.15) inset, 0 0 4px rgba(51,255,102,.4), 0 0 12px rgba(51,255,102,.15); }
 
   /* 圖表泡泡：滿版磷光之間放全彩 D3 圖，形成焦點反差（spec §2 決策） */
   .tchart { background: #f7fbf7; border-radius: 2px; padding: 6px; }
@@ -187,9 +254,12 @@
 
   /* 編號選單（仿 Claude Code 權限選單） */
   .tmenu { margin: 2px 0 4px; }
-  .tmenu-opt { cursor: pointer; padding: 3px 8px; border-radius: 2px; display: block; color: var(--term-fg); }
-  .tmenu-opt:hover, .tmenu-opt.sel { background: rgba(51,255,102,.14); }
-  .tmenu-opt .k { color: var(--term-amber); margin-right: 8px; }
+  .tmenu-opt { cursor: pointer; padding: 3px 8px; border-radius: 2px; display: block; color: var(--term-fg);
+    transition: background .1s, box-shadow .1s; }
+  .tmenu-opt:hover { background: rgba(51,255,102,.14); box-shadow: 0 0 6px rgba(51,255,102,.2); }
+  .tmenu-opt.sel { background: rgba(51,255,102,.18); box-shadow: 0 0 8px rgba(51,255,102,.35); }
+  .tmenu-opt .k { color: var(--term-amber); margin-right: 8px;
+    text-shadow: 0 0 3px rgba(255,176,0,.4); }
 
   /* 底部固定輸入區 + footer */
   .term-input { flex: none; border-top: 1px solid var(--term-faint); padding: 8px 14px; z-index: 6; }
@@ -197,19 +267,27 @@
   .term-prompt .caret { color: var(--term-amber); flex: none; padding-top: 6px; }
   .term-ta { flex: 1; background: transparent; border: none; outline: none; resize: none;
     color: var(--term-fg); font-family: inherit; font-size: 14.5px; line-height: 1.6;
-    text-shadow: inherit; caret-color: var(--term-fg); }
-  .term-ta::placeholder { color: var(--term-faint); }
-  .term-ta:disabled { color: var(--term-faint); }
-  .term a, .term .tlink { color: var(--term-amber); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
-  .term a:hover, .term .tlink:hover { color: var(--term-fg); text-shadow: 0 0 6px rgba(51,255,102,.6); }
+    text-shadow: 0 0 1px #33ff66, 0 0 3px rgba(51,255,102,.5); caret-color: var(--term-fg); }
+  .term-ta::placeholder { color: var(--term-faint); text-shadow: none; }
+  .term-ta:disabled { color: var(--term-faint); text-shadow: none; }
+  .term-ta:focus { text-shadow: 0 0 1px #33ff66, 0 0 4px rgba(51,255,102,.7), 0 0 10px rgba(51,255,102,.3); }
+  .term a, .term .tlink { color: var(--term-amber); text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+    text-shadow: 0 0 2px rgba(255,176,0,.4); }
+  .term a:hover, .term .tlink:hover { color: var(--term-fg);
+    text-shadow: 0 0 2px #33ff66, 0 0 6px rgba(51,255,102,.6), 0 0 12px rgba(51,255,102,.3); }
   .blink { animation: term-blink 1s steps(1) infinite; }
   @keyframes term-blink { 50% { opacity: 0; } }
+  /* 游標也要有 glow */
+  .term .blink { text-shadow: 0 0 2px #33ff66, 0 0 6px rgba(51,255,102,.8); }
 
   .term-foot { flex: none; display: flex; gap: 14px; flex-wrap: wrap; align-items: center;
-    padding: 5px 14px 8px; font-size: 12px; color: var(--term-dim); z-index: 6; }
+    padding: 5px 14px 8px; font-size: 12px; color: var(--term-dim); z-index: 6;
+    text-shadow: 0 0 1px rgba(51,255,102,.2); }
   .term-foot button { background: transparent; border: 1px solid var(--term-faint); color: var(--term-dim);
-    font-family: inherit; font-size: 12px; padding: 2px 10px; border-radius: 2px; cursor: pointer; }
-  .term-foot button:hover { color: var(--term-fg); border-color: var(--term-dim); }
+    font-family: inherit; font-size: 12px; padding: 2px 10px; border-radius: 2px; cursor: pointer;
+    transition: all .15s; }
+  .term-foot button:hover { color: var(--term-fg); border-color: var(--term-dim);
+    box-shadow: 0 0 6px rgba(51,255,102,.25); text-shadow: 0 0 3px rgba(51,255,102,.5); }
   .term-foot .spacer { flex: 1; }
   /* 終端機標題列署名 */
   .term-head .credit { color: var(--term-faint); font-size: 11px; }
@@ -223,16 +301,35 @@
   /* 開機動畫 */
   .term-boot { position: fixed; inset: 0; background: #000; color: var(--term-fg); z-index: 60;
     font-family: "IBM Plex Mono", monospace; padding: 40px 24px; overflow: hidden;
-    text-shadow: 0 0 3px rgba(51,255,102,.5); cursor: pointer; }
+    text-shadow: 0 0 2px #33ff66, 0 0 4px rgba(51,255,102,.6), 0 0 10px rgba(51,255,102,.3);
+    cursor: pointer; }
   .term-boot .line { white-space: pre-wrap; }
-  .boot-crt-on { animation: crt-on .55s ease-out; }
+  /* CRT 開機：水平亮線展開 + 磁場跳動 + 聚焦 */
+  .boot-crt-on { animation: crt-on .7s cubic-bezier(.2,.8,.3,1); }
   @keyframes crt-on {
-    0% { transform: scale(1.6, .002); filter: brightness(3); opacity: 0; }
-    35% { transform: scale(1.6, .006); filter: brightness(3); opacity: 1; }
-    60% { transform: scale(1, .02); filter: brightness(2); }
-    100% { transform: scale(1,1); filter: brightness(1); opacity: 1; }
+    0% { transform: scale(1.8, .003) translateY(0); filter: brightness(4) blur(2px); opacity: 0; }
+    20% { transform: scale(1.6, .008) translateY(-2px); filter: brightness(4) blur(1px); opacity: 1; }
+    35% { transform: scale(1.4, .02) translateY(3px); filter: brightness(3) blur(0.5px); }
+    50% { transform: scale(1.1, .15) translateY(-1px); filter: brightness(2.5) blur(0); }
+    65% { transform: scale(1.02, .5) translateY(1px); filter: brightness(1.8); }
+    80% { transform: scale(1, .85) translateY(0); filter: brightness(1.3); }
+    90% { transform: scale(1.01, 1.02); filter: brightness(1.1); }
+    100% { transform: scale(1, 1); filter: brightness(1); opacity: 1; }
   }
-  @media (prefers-reduced-motion: reduce) { .boot-crt-on { animation: none; } }
+  /* 開機畫面也要有掃描線 */
+  .term-boot::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(to bottom, rgba(0,0,0,0) 0, rgba(0,0,0,0) 2px, rgba(0,0,0,.2) 3px, rgba(0,0,0,0) 4px);
+  }
+  /* 開機時的磁場干擾閃爍 */
+  .boot-flicker { animation: boot-mag-flicker .08s steps(1) 3; }
+  @keyframes boot-mag-flicker {
+    0%, 100% { opacity: 1; transform: translateX(0); }
+    25% { opacity: .6; transform: translateX(-2px) skewX(-0.5deg); }
+    50% { opacity: .9; transform: translateX(1px) skewX(0.3deg); }
+    75% { opacity: .7; transform: translateX(-1px); }
+  }
+  @media (prefers-reduced-motion: reduce) { .boot-crt-on, .boot-flicker { animation: none; } }
 
   /* 哭臉→笑臉評分列 */
   .term .trate-faces { display: flex; gap: 8px; }
@@ -424,12 +521,27 @@
     <div class="source-link">
       資料來源：<a :href="sourceUrl" target="_blank">Taiwan National Security Survey (Duke University)</a>
       · 族群以「父親省籍」為代理變項，非受訪者自陳認同。
-      <span class="credit">· © Kelunyang@2026 · <a href="https://github.com/kelunyang/demo-question-terminal" target="_blank" rel="noopener">github.com/kelunyang/demo-question-terminal</a></span>
+      <span class="credit">· © Kelunyang@2026 · <a href="https://github.com/kelunyang/demo-question-terminal" target="_blank" rel="noopener">GitHub</a></span>
     </div>
   </div>
 
   <!-- AI 描述 -->
   <div class="panel" v-if="hasChart">
+    <!-- 自動分析開關 -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <el-switch v-model="autoAnalysis" active-text="自動生成分析報告" inactive-text="自訂分析方向"
+        :disabled="descLoading" @change="onAutoAnalysisChange" />
+    </div>
+    <!-- 手動輸入分析方向（autoAnalysis=false 時顯示） -->
+    <div v-if="!autoAnalysis && !descLoading" style="margin-bottom:10px">
+      <el-input v-model="analysisPrompt" type="textarea" :rows="2"
+        placeholder="請輸入想從這張圖看到什麼？例如：比較各族群在統獨立場的世代差異" />
+      <el-button type="primary" style="margin-top:8px" @click="triggerManualAnalysis"
+        :disabled="!analysisPrompt.trim()">
+        <i class="fa-solid fa-wand-magic-sparkles"></i>&nbsp; 生成分析報告
+      </el-button>
+    </div>
+    <!-- AI 思考中 -->
     <div class="ai-thinking" v-if="descLoading">
       <i class="fa-solid fa-brain fa-fade"></i>
       <span v-if="!aiReasoning">連線中…（{{ descElapsed }}s）</span>
@@ -437,11 +549,12 @@
       <el-button v-if="descElapsed > 12" size="small" text type="warning" style="margin-left:8px"
         @click="cancelDesc">等太久了？取消</el-button>
     </div>
-    <div class="ai-desc">
+    <!-- AI 描述結果 -->
+    <div class="ai-desc" v-if="autoAnalysis || aiDescription">
       <i class="fa-solid fa-robot"></i>
       <span v-if="descLoading && !aiDescription">AI 產生資料描述中…</span>
       <span v-else>{{ aiDescription || '（尚無描述）' }}</span>
-      <el-button v-if="!descLoading" size="small" text style="margin-left:6px" @click="autoDescribe">
+      <el-button v-if="!descLoading && aiDescription" size="small" text style="margin-left:6px" @click="autoDescribe">
         <i class="fa-solid fa-rotate-right"></i>&nbsp;重新產生
       </el-button>
     </div>
@@ -670,9 +783,11 @@
 
   <!-- ===================== 終端機版（terminal） ===================== -->
   <div class="term" v-if="uiMode==='terminal'">
+    <div class="term-noise" aria-hidden="true"></div>
     <div class="term-scan" aria-hidden="true"></div>
+    <div class="term-tear" aria-hidden="true"></div>
     <div class="term-head">
-      <span><span class="dot">●</span>&nbsp; TNSS-TERMINAL · 台灣的族群政治 <span class="credit">· © Kelunyang@2026 · <a href="https://github.com/kelunyang/demo-question-terminal" target="_blank" rel="noopener">github.com/kelunyang/demo-question-terminal</a></span></span>
+      <span><span class="dot">●</span>&nbsp; TNSS-TERMINAL · 台灣的族群政治 <span class="credit">· © Kelunyang@2026 · <a href="https://github.com/kelunyang/demo-question-terminal" target="_blank" rel="noopener">GitHub</a></span></span>
       <span><i class="fa-solid fa-cog" @click="openSettings" title="設定"></i></span>
     </div>
 
@@ -921,7 +1036,7 @@
   <!-- ===================== /終端機版 ===================== -->
 
   <!-- 開機動畫覆蓋層 -->
-  <div class="term-boot" v-if="boot.show" @click="skipBoot">
+  <div class="term-boot" v-if="boot.show" @click="skipBoot" :class="{'boot-flicker': boot.flicker}">
     <div v-for="(l,i) in boot.lines" :key="i" class="line" :class="{'boot-crt-on': i===0}">{{ l }}</div>
     <div v-if="boot.cursor" class="line"><span class="blink">█</span></div>
   </div>
@@ -1622,10 +1737,13 @@ createApp({
       teacherQuiz: { questionType: '四選一選擇題', objective: '', rubric: '' }, // 題目本文交給 EasyMDE 管理，不放進 reactive state
       settingsDialog: false,
       settings: { defaultPrompt: '', modelTier: 'flash', saving: false },
+      // ---- 分析報告選項 ----
+      autoAnalysis: true,          // true = 自動生成分析報告；false = 使用者輸入分析方向
+      analysisPrompt: '',          // 使用者自訂的分析方向（autoAnalysis=false 時使用）
       insight: { open: false, input: '', messages: [], loading: false, elapsed: 0, gen: 0, pendingText: '' },
       // ---- 終端機版 ----
       uiMode: 'terminal', // demo 主體驗；可用 footer / classic header 的按鈕切到 'classic'
-      boot: { show: true, lines: [], cursor: false },
+      boot: { show: true, lines: [], cursor: false, flicker: false },
       term: {
         log: [], seq: 0, input: '', inputEnabled: false, placeholder: '',
         pending: null, // { type:'menu'|'input', resolve, options }
@@ -1633,6 +1751,7 @@ createApp({
         _abort: false, // 卡在非 resolver 的 await（AI 串流）時，下個等待點自檢丟出
         _dataChanged: false, // 分析對話中若 AI 動了資料（篩選/欄位/年度）就標記，之後重畫圖
         _analysisMsgs: null, // 分析階段的持續對話（帶 tool），每輪 runCycle 重置
+        _analysisPrompt: '', // 使用者輸入的分析方向（給 saveResultTerm 用）
         busy: false, running: false
       },
       // ---- 多年度播放 ----
@@ -1923,7 +2042,31 @@ createApp({
       state.smallSampleWarn = r.smallWarn;
       state.legend = r.legend;
       state.lastChartPayload = r.payload;
-      autoDescribe();
+      if (state.autoAnalysis) {
+        autoDescribe();
+      } else {
+        state.aiDescription = '';
+        state.aiReasoning = '';
+        state.descEmpty = false;
+      }
+    }
+
+    // 切換自動分析開關時的處理
+    function onAutoAnalysisChange(val) {
+      if (val && state.hasChart) {
+        state.analysisPrompt = '';
+        autoDescribe();
+      } else {
+        state.aiDescription = '';
+        state.aiReasoning = '';
+        state.descEmpty = false;
+      }
+    }
+
+    // 手動觸發分析（使用者輸入了自訂分析方向）
+    function triggerManualAnalysis() {
+      if (!state.analysisPrompt.trim()) return;
+      autoDescribe(state.analysisPrompt);
     }
 
     function drawLine(g, s, x, y, ih, seriesIdx) {
@@ -2142,21 +2285,25 @@ createApp({
 
     // ---------- AI 描述 ----------
     let descTimer = null;
-    function autoDescribe() {
+    function autoDescribe(customPrompt) {
       state.aiDescription = ''; state.aiReasoning = ''; state.descLoading = true; state.descEmpty = false;
       clearTimeout(descTimer);
       const payload = state.lastChartPayload;
       const myGen = ++state.descGen;
+      const userDirection = customPrompt || '';
       descTimer = setTimeout(async () => {
-        console.log('[autoDescribe] 開始，myGen=' + myGen);
+        console.log('[autoDescribe] 開始，myGen=' + myGen, userDirection ? '自訂方向:' + userDirection : '自動');
         const stopTimer = startElapsedTimer(el => { if (myGen === state.descGen) state.descElapsed = el; });
         try {
           const summary = getChartSummaryForAI();
+          const baseInstruction = userDirection
+            ? `以下是使用者當前篩選出的圖表資料摘要。使用者想知道：「${userDirection}」\n請據此撰寫 150 字內的中文分析：\n\n`
+            : '以下是使用者當前篩選出的圖表資料摘要，請據此撰寫 100 字內的中文描述：\n\n';
           const messages = [
             { role: 'system', content: state.settings.defaultPrompt }, { role: 'system', content: TOPIC_GUARD },
-            { role: 'user', content: '以下是使用者當前篩選出的圖表資料摘要，請據此撰寫 100 字內的中文描述：\n\n' + summary }
+            { role: 'user', content: baseInstruction + summary }
           ];
-          const res = await runToolLoop(messages, null, null, 800, d => {
+          const res = await runToolLoop(messages, null, null, userDirection ? 1200 : 800, d => {
             if (myGen !== state.descGen) return;
             state.aiReasoning = d.reasoning; state.aiDescription = d.content;
           });
@@ -2514,7 +2661,7 @@ createApp({
         const { questionsText, answersText } = buildQuizTexts();
         const record = {
           filterset: JSON.stringify({ year: state.year, selectedFields: state.selectedFields, fieldFilters: state.fieldFilters }),
-          analysis_prompt: '',
+          analysis_prompt: state.analysisPrompt || '',
           analysisresult: state.aiDescription || '',
           questiontype: state.quiz.questionType || (state.quiz.items[0] && state.quiz.items[0].teacherQType) || '',
           quiz_prompt: [state.quiz.direction, state.teacherQuiz.objective].filter(Boolean).join(' / '),
@@ -3324,9 +3471,8 @@ createApp({
             tq.qtype = setup.type; tq.direction = setup.direction;
             await aiGenerateOne(tq, false);
           }
-          const c = await awaitMenu(pick(POOLS.S9ai), [{ label: '請 AI 評論、我再重出' }, { label: '作答完成' }]);
-          if (c === 1) answering = true;
-          else { tq.feedback = await awaitInput('這題哪裡要改？我照著重出'); await aiGenerateOne(tq, true); }
+          await awaitMenu(pick(POOLS.S9ai), [{ label: '作答完成' }]);
+          answering = true;
         } else {
           if (tq.count === 0) await stepTeacherForm();
           const c = await awaitMenu(pick(POOLS.S9teacher), [{ label: '再出一題' }, { label: '作答完成' }]);
@@ -3401,7 +3547,7 @@ createApp({
         const analysis = [...state.term.log].reverse().find(l => l.kind === 'ai' && !l.empty);
         const record = {
           filterset: JSON.stringify({ year: state.year, selectedFields: state.selectedFields, fieldFilters: state.fieldFilters }),
-          analysis_prompt: '',
+          analysis_prompt: state.term._analysisPrompt || '',
           analysisresult: analysis ? analysis.text : '',
           questiontype: tq.qtype || (tq.items[0] && tq.items[0].qtype) || '',
           quiz_prompt: [tq.direction, tq.items[0] && tq.items[0].objective].filter(Boolean).join(' / '),
@@ -3426,17 +3572,34 @@ createApp({
       ]); // S1
       if (mode === 0) await stepDemo(); else if (mode === 1) await stepInsightSelect(); else await stepUiSelect(); // S2 → S3 出圖
       state.term._analysisMsgs = null;                                           // 每輪重置分析對話
-      while (true) {                                                              // S4–S6 分析迴圈
-        const dir = await awaitInput('想從這張圖看到什麼？也可以要我調整資料（例：只看外省人、改看政黨認同、換 2020 年）');
-        await runAnalysisTerm(dir);
+      state.term._analysisPrompt = '';                                           // 重置分析方向
+      // S4a: 詢問分析方式
+      const analysisMode = await awaitMenu('圖表已完成，接下來要怎麼分析呢？', [
+        { label: '自動產生分析報告' },
+        { label: '我想指定分析方向' }
+      ]);
+      let firstDir = '';
+      if (analysisMode === 0) {
+        firstDir = '請根據這張圖表的資料，分析各族群在不同世代之間的差異與趨勢。';
+      } else {
+        firstDir = await awaitInput('想從這張圖看到什麼？（例如：比較各族群在統獨立場的世代差異）');
+      }
+      state.term._analysisPrompt = firstDir;
+      await runAnalysisTerm(firstDir);
+      // S4–S6 分析迴圈
+      while (true) {
         const c = await awaitMenu(pick(POOLS.S6), [{ label: 'AI 幫我出題' }, { label: '我自己出題' }, { label: '繼續分析' }]);
         if (c === 0) { await quizPhase('ai'); return; }
         if (c === 1) { await quizPhase('teacher'); return; }
+        const dir = await awaitInput('還想從這張圖看到什麼？也可以要我調整資料（例：只看外省人、改看政黨認同、換 2020 年）');
+        state.term._analysisPrompt = dir; // 更新分析方向
+        await runAnalysisTerm(dir);
       }
     }
     // 清空終端機畫面狀態（log／圖表／行 ref），供重來一輪或 footer「重新開始」共用
     function hardResetTerm() {
       state.term.log = []; state.term.seq = 0;
+      state.term._analysisPrompt = '';
       Object.keys(chartEls).forEach(k => delete chartEls[k]);
       Object.keys(lineEls).forEach(k => delete lineEls[k]);
     }
@@ -3474,22 +3637,37 @@ createApp({
     }
 
     // ---- 開機動畫 ----
+    async function triggerFlicker() {
+      state.boot.flicker = true;
+      await sleep(250);
+      state.boot.flicker = false;
+    }
     async function bootThenRun() {
       const initP = init();
-      state.boot.lines = []; state.boot.cursor = false;
-      for (const l of ['TNSS TERMINAL BIOS v1.0', 'MEMORY CHECK.......... OK']) { state.boot.lines.push(l); await sleep(280); }
+      state.boot.lines = []; state.boot.cursor = false; state.boot.flicker = false;
+      // 模擬 CRT 開機的磁場干擾
+      for (const l of ['TNSS TERMINAL BIOS v1.0', 'MEMORY CHECK.......... OK']) {
+        state.boot.lines.push(l);
+        await sleep(280);
+      }
+      triggerFlicker(); // 第一波磁場干擾
       const idx = state.boot.lines.push('LOADING DATASET (16 YEARS)...') - 1;
       await Promise.race([initP.catch(() => { }), sleep(3000)]);
       state.boot.lines[idx] += ' OK';
       await sleep(200);
-      for (const l of ['ESTABLISHING LINK TO AI ENGINE... OK', 'ALL SYSTEMS NOMINAL']) { state.boot.lines.push(l); await sleep(280); }
+      triggerFlicker(); // 第二波磁場干擾
+      for (const l of ['ESTABLISHING LINK TO AI ENGINE... OK', 'ALL SYSTEMS NOMINAL']) {
+        state.boot.lines.push(l);
+        await sleep(280);
+      }
       state.boot.cursor = true; await sleep(500);
       state.boot.show = false;
       runFlow();
     }
     async function bootQuick() {
       state.boot.lines = ['RESTARTING SESSION...']; state.boot.cursor = true; state.boot.show = true;
-      await sleep(650); state.boot.show = false;
+      state.boot.flicker = true; await sleep(150); state.boot.flicker = false;
+      await sleep(500); state.boot.show = false;
     }
     function skipBoot() {
       state.boot.show = false;
@@ -3589,6 +3767,7 @@ createApp({
       onYearChange, onFieldsChange, drawChart, openQuiz, doGenerateQuiz, addNextQuestion, doGradeQuiz,
       openSettings, doSaveSettings, sendInsight, md, mdInline,
       autoDescribe, cancelDesc, cancelQuizGen, cancelQuizGrade, cancelInsight, retryInsight,
+      onAutoAnalysisChange, triggerManualAnalysis,
       fieldLabel, openFilterDialog, applyFilterDialog, clearFilterDialog, toggleHighlight,
       openTeacherQuiz, onTeacherQuizDrawerOpen, submitTeacherQuiz, runTeacherReview,
       submitGradeFeedback, saveQuizResult,
