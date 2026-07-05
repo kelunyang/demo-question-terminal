@@ -635,6 +635,12 @@
             不用自己標 A/B/C/D，系統會自動配。
           </template>
         </el-alert>
+        <el-alert v-if="teacherQuiz.questionType === '是非題'" type="warning" :closable="false"
+          show-icon style="margin-bottom:8px">
+          <template #title>
+            是非題請把選項排成剛好 2 項的清單（例如「- 對」「- 錯」），系統會自動配成 ○/× 選項。
+          </template>
+        </el-alert>
         <div style="font-size:12px;color:#999;margin-bottom:4px">
           最後單獨一行寫「正確答案：X」（批改時才會用到，不會顯示給學生看）。格式不齊全會擋下無法送出。
         </div>
@@ -923,8 +929,8 @@
               <el-input v-model="ln.rubric" :disabled="ln.done" type="textarea" :rows="2" style="margin-bottom:8px"
                 placeholder="例如：答對族群趨勢方向得滿分，方向相反不給分" />
               <div style="color:var(--term-dim);font-size:12px;margin-bottom:4px">
-                題目內容（Markdown）。四選一請把 4 個選項各自寫成一行清單（- 開頭），不用標 A/B/C/D；
-                最後單獨一行寫「正確答案：X」。
+                題目內容（Markdown）。四選一請把 4 個選項寫成清單（- 開頭），是非題則寫 2 個選項；
+                不用標 A/B/C/D，系統會自動配。最後單獨一行寫「正確答案：X」。
               </div>
               <el-input v-model="ln.body" :disabled="ln.done" type="textarea" :rows="6" style="margin-bottom:8px"
                 placeholder="在這裡用 Markdown 寫題目…" />
@@ -1319,13 +1325,14 @@ function splitAnswerKey(text) {
 
 // 把「A. xxx / B. xxx / C. xxx / D. xxx」這種選項行從題目本文抓出來、從顯示文字中移除，
 // 好讓前端改用真正可以點選的 el-radio-group 呈現，而不是整段當純文字顯示。
-// 只有剛好抓到 4 個選項才當作標準四選一；抓不齊就整段當純文字退回顯示（不強求）。
+// 支援 4 個選項（四選一）或 2 個選項（是非題）；抓不齊就整段當純文字退回顯示（不強求）。
 function parseAndStripOptions(text) {
   var re = /^[-*]?\s*([A-D])[.．、][ \t]*(.+)$/gm;
   var matches = [];
   var m;
   while ((m = re.exec(text))) matches.push({ label: m[1], text: m[2].trim(), index: m.index, length: m[0].length });
-  if (matches.length !== 4) return { stem: text.trim(), options: null };
+  // 支援 4 選項（四選一）或 2 選項（是非題）
+  if (matches.length !== 4 && matches.length !== 2) return { stem: text.trim(), options: null };
   var stem = text;
   for (var i = matches.length - 1; i >= 0; i--) {
     stem = stem.slice(0, matches[i].index) + stem.slice(matches[i].index + matches[i].length);
@@ -1335,19 +1342,20 @@ function parseAndStripOptions(text) {
 }
 
 // 老師手寫題目專用：直接抓一段連續的標準 Markdown 清單（- / * / + 開頭的 ul，或 1. 2. ... 開頭的 ol），
-// 不要求老師自己標 A/B/C/D，依清單順序自動配上 A/B/C/D。只有剛好抓到 4 項才當作標準四選一。
+// 不要求老師自己標 A/B/C/D，依清單順序自動配上標籤。支援 4 項（四選一）或 2 項（是非題）。
 function parseMarkdownListOptions(text) {
   var re = /^[ \t]*(?:[-*+]|\d+[.．])[ \t]+(.+)$/gm;
   var matches = [];
   var m;
   while ((m = re.exec(text))) matches.push({ text: m[1].trim(), index: m.index, length: m[0].length });
-  if (matches.length !== 4) return { stem: text.trim(), options: null };
+  // 支援 4 選項（四選一）或 2 選項（是非題）
+  if (matches.length !== 4 && matches.length !== 2) return { stem: text.trim(), options: null };
   var stem = text;
   for (var i = matches.length - 1; i >= 0; i--) {
     stem = stem.slice(0, matches[i].index) + stem.slice(matches[i].index + matches[i].length);
   }
   stem = stem.replace(/\n{3,}/g, '\n\n').trim();
-  var LABELS = ['A', 'B', 'C', 'D'];
+  var LABELS = matches.length === 2 ? ['○', '×'] : ['A', 'B', 'C', 'D'];
   return { stem: stem, options: matches.map(function (o, i) { return { label: LABELS[i], text: o.text }; }) };
 }
 
@@ -2437,10 +2445,11 @@ createApp({
       }
 
       let stem = display, options = null;
-      if (state.teacherQuiz.questionType === '四選一選擇題') {
+      if (state.teacherQuiz.questionType === '四選一選擇題' || state.teacherQuiz.questionType === '是非題') {
         const parsed = parseMarkdownListOptions(display);
+        const expectedCount = state.teacherQuiz.questionType === '是非題' ? 2 : 4;
         if (!parsed.options) {
-          ElementPlus.ElMessage.error('沒有偵測到剛好 4 項清單選項，請用編輯器工具列的清單按鈕把選項排成清單（剛好 4 項）後再送出');
+          ElementPlus.ElMessage.error(`沒有偵測到剛好 ${expectedCount} 項清單選項，請用編輯器工具列的清單按鈕把選項排成清單（剛好 ${expectedCount} 項）後再送出`);
           return;
         }
         stem = parsed.stem; options = parsed.options;
@@ -2536,12 +2545,15 @@ createApp({
           '要求：以 Markdown 格式輸出這一題；題目須根據下方資料，勿超出資料範圍。',
           '排版務必分成清楚的區塊，題目本文與選項要分開、不要擠在同一段：',
           '- 題目本文獨立成一段',
-          '- 若為選擇題，選項另起一個 Markdown 清單（每個選項各自一行，用「- A. ...」「- B. ...」這種清單語法，不要用純換行）',
+          '- 若為四選一選擇題，選項另起一個 Markdown 清單（每個選項各自一行，用「- A. ...」「- B. ...」「- C. ...」「- D. ...」這種清單語法，剛好 4 個選項）',
+          '- 若為是非題，選項只需要兩個：「- A. 對（或正確/是）」和「- B. 錯（或錯誤/否）」',
           '- 最後單獨一行，用純文字格式「正確答案：X」標示正確答案或參考答案重點（不要加粗、不要有其他文字混在同一行）；',
           '  這行系統會自動移除、不會顯示給作答者看，只用於之後批改比對，所以務必確實填寫、不能省略。',
           '',
           '極重要（輸出格式）：把題目內容放進一個 Markdown code block（用三個反引號 ``` 包住）裡，',
-          '例如：\n```\n## 第 ' + qNum + ' 題\n\n（題目本文）\n\n- A. （選項一）\n- B. （選項二）\n- C. （選項三）\n- D. （選項四）\n\n正確答案：X\n```\n',
+          state.quiz.questionType === '是非題'
+            ? '例如：\n```\n## 第 ' + qNum + ' 題\n\n（題目本文，陳述一個命題讓學生判斷對錯）\n\n- A. 對\n- B. 錯\n\n正確答案：A\n```\n'
+            : '例如：\n```\n## 第 ' + qNum + ' 題\n\n（題目本文）\n\n- A. （選項一）\n- B. （選項二）\n- C. （選項三）\n- D. （選項四）\n\n正確答案：X\n```\n',
           '整段回覆只能有這一個 code block，直接輸出，不要有 code block 以外的說明文字。'
         ];
         if (state.quiz.items.length) {
@@ -2562,7 +2574,7 @@ createApp({
         const cleaned = extractCodeBlock(result.content);
         const { display, answer } = splitAnswerKey(cleaned);
         let stem = display, options = null;
-        if (state.quiz.questionType === '四選一選擇題') {
+        if (state.quiz.questionType === '四選一選擇題' || state.quiz.questionType === '是非題') {
           const parsed = parseAndStripOptions(display);
           stem = parsed.stem; options = parsed.options;
         }
@@ -3430,9 +3442,13 @@ createApp({
       const { display, answer } = splitAnswerKey(raw);
       if (!answer) { ElementPlus.ElMessage.error('請在題目最後單獨一行補上「正確答案：X」'); return; }
       let stem = display, options = null;
-      if (ln.qtype === '四選一選擇題') {
+      if (ln.qtype === '四選一選擇題' || ln.qtype === '是非題') {
         const parsed = parseMarkdownListOptions(display);
-        if (!parsed.options) { ElementPlus.ElMessage.error('四選一請把 4 個選項各寫成一行清單（- 開頭，剛好 4 項）'); return; }
+        const expectedCount = ln.qtype === '是非題' ? 2 : 4;
+        if (!parsed.options) {
+          ElementPlus.ElMessage.error(`請把 ${expectedCount} 個選項各寫成一行清單（- 開頭，剛好 ${expectedCount} 項）`);
+          return;
+        }
         stem = parsed.stem; options = parsed.options;
       }
       ln.done = true; disableInput();
