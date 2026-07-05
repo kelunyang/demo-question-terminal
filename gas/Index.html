@@ -3404,7 +3404,7 @@ createApp({
       const cleaned = extractCodeBlock(res.content);
       const { display, answer } = splitAnswerKey(cleaned);
       let stem = display, options = null;
-      if (tq.qtype === '四選一選擇題') { const p = parseAndStripOptions(display); stem = p.stem; options = p.options; }
+      if (tq.qtype === '四選一選擇題' || tq.qtype === '是非題') { const p = parseAndStripOptions(display); stem = p.stem; options = p.options; }
       if (regen && tq.items.length) {
         const last = tq.items[tq.items.length - 1];
         last.display = stem; last.options = options; last.answer = ''; last._answerKey = answer;
