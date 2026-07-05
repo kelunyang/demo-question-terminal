@@ -18,6 +18,9 @@
     box-shadow: 0 1px 4px rgba(0,0,0,.06); }
   .ctrl-row { margin-bottom: 12px; }
   .ctrl-label { font-size: 13px; color: #7f8c8d; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+  .playback-controls { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e0e0e0; }
+  .playback-controls .el-steps { margin-bottom: 8px; }
+  .playback-controls .el-step__title { font-size: 12px !important; }
   .chart-wrap { position: relative; min-height: 340px; }
   .source-link { font-size: 12px; color: #95a5a6; margin-top: 8px; }
   .source-link a { color: #7f8c8d; }
@@ -37,8 +40,28 @@
   .rate-face { cursor: pointer; font-size: 20px; opacity: .35; filter: grayscale(60%); transition: opacity .15s, filter .15s; padding: 0 2px; }
   .rate-face:hover { opacity: .7; }
   .rate-face.active { opacity: 1; filter: none; }
-  .bar-highlighted { stroke: #e74c3c; stroke-width: 3px; }
+  .bar-highlighted { stroke: #e74c3c; stroke-width: 3px; animation: bar-jiggle .4s ease-out; }
   .point-highlight { pointer-events: none; }
+  .group-highlighted { stroke: #e74c3c; stroke-width: 2.5px; filter: drop-shadow(0 0 4px #e74c3c); animation: point-jiggle .5s ease-out; }
+  .line-highlighted { stroke-width: 4px !important; filter: drop-shadow(0 0 6px currentColor); }
+  @keyframes point-jiggle {
+    0% { transform: scale(1); }
+    20% { transform: scale(1.8); }
+    40% { transform: scale(0.9); }
+    60% { transform: scale(1.3); }
+    80% { transform: scale(0.95); }
+    100% { transform: scale(1); }
+  }
+  @keyframes bar-jiggle {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-3px); }
+    40% { transform: translateX(3px); }
+    60% { transform: translateX(-2px); }
+    80% { transform: translateX(1px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .group-highlighted, .bar-highlighted, .line-highlighted { animation: none; }
+  }
   .filter-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   .filter-chip { display: inline-flex; align-items: center; gap: 4px; background: #f4f6f8;
     border: 1px solid #e4e7ed; border-radius: 16px; padding: 2px 4px 2px 10px; font-size: 12.5px; color: #606266; }
@@ -325,13 +348,44 @@
   <!-- 控制列 -->
   <div class="panel">
     <div class="ctrl-row">
-      <div class="ctrl-label"><i class="fa-solid fa-calendar"></i> 調查年度</div>
-      <el-segmented v-model="year" :options="yearOptions" @change="onYearChange" ></el-segmented>
+      <div class="ctrl-label">
+        <i class="fa-solid fa-calendar"></i> 調查年度
+        <span v-if="playback.selectedYears.length > 1" style="color:#409eff;margin-left:8px">(多年度模式)</span>
+      </div>
+      <el-checkbox-group v-model="playback.selectedYears" @change="onYearsChange" :disabled="playback.isPlaying">
+        <el-checkbox-button v-for="y in yearOptions" :key="y.value" :value="y.value">{{ y.label }}</el-checkbox-button>
+      </el-checkbox-group>
+      <!-- 播放控制面板（多年度時顯示） -->
+      <div v-if="playback.selectedYears.length > 1" class="playback-controls">
+        <el-steps :active="playback.currentIndex" :space="80" simple finish-status="success" style="margin:8px 0">
+          <el-step v-for="(y, idx) in playback.selectedYears" :key="y" :title="y" />
+        </el-steps>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <el-button-group>
+            <el-button @click="playbackPrev" :disabled="playback.currentIndex === 0 || playback.isPlaying">
+              <i class="fa-solid fa-backward-step"></i>
+            </el-button>
+            <el-button @click="playbackToggle" type="primary">
+              <i :class="playback.isPlaying ? 'fa-solid fa-pause' : 'fa-solid fa-play'"></i>
+              {{ playback.isPlaying ? '暫停' : '播放' }}
+            </el-button>
+            <el-button @click="playbackNext" :disabled="playback.currentIndex >= playback.selectedYears.length - 1 || playback.isPlaying">
+              <i class="fa-solid fa-forward-step"></i>
+            </el-button>
+          </el-button-group>
+          <span style="font-size:12px;color:#909399">速度</span>
+          <el-slider v-model="playback.intervalMs" :min="1000" :max="10000" :step="500"
+            :format-tooltip="v => (v/1000) + '秒'" style="width:150px" :disabled="playback.isPlaying" />
+          <div v-if="playback.preloadProgress < 100" style="font-size:12px;color:#e6a23c">
+            <i class="fa-solid fa-spinner fa-spin"></i> 預載中 {{ playback.preloadProgress }}%
+          </div>
+        </div>
+      </div>
     </div>
     <div class="ctrl-row">
       <div class="ctrl-label"><i class="fa-solid fa-list-check"></i> 議題欄位（可複選；每個欄位會畫出其底下所有類別的分布；X 軸固定為出生年代）</div>
       <!-- el-segmented 僅支援單選，複選改用外觀相連的 checkbox-button 群組 -->
-      <el-checkbox-group v-model="selectedFields" @change="onFieldsChange">
+      <el-checkbox-group v-model="selectedFields" @change="onFieldsChange" :disabled="playback.isPlaying">
         <el-checkbox-button v-for="o in fieldOptions" :key="o.value" :value="o.value">{{ o.label }}</el-checkbox-button>
       </el-checkbox-group>
 
@@ -360,7 +414,7 @@
       <el-empty v-if="!hasChart && !loadingData" :description="emptyChartHint" ></el-empty>
     </div>
     <div class="legend" v-if="hasChart">
-      <span v-for="s in legend" :key="s.name" :style="{opacity: s.dim ? 0.5 : 1}">
+      <span v-for="s in legend" :key="s.name" :style="{opacity: s.dim ? 0.3 : 1}">
         <span class="dot" :style="{background:s.color}"></span>{{ s.name }}
       </span>
     </div>
@@ -578,7 +632,8 @@
     </div>
     <div class="insight-body" ref="insightBody">
       <div v-if="!insight.messages.length" style="color:#95a5a6;font-size:13px">
-        問我任何關於這份資料的問題，例如「2025 年各族群的統獨立場差多少？」我會查資料後回答。
+        問我任何關於這份資料的問題，例如「2025 年各族群的統獨立場差多少？」我會查資料後回答。<br>
+        <span style="color:#f39c12">試試輸入「DEMO」看個範例圖表。</span>
       </div>
       <div v-for="(m,i) in insight.messages" :key="i" class="msg" :class="m.role">
         <div>
@@ -642,16 +697,20 @@
             v-if="ln.typing" class="blink">▊</span>
         </template>
 
-        <!-- 編號選單 -->
+        <!-- 編號選單：選完後只顯示選中的文字 -->
         <template v-else-if="ln.kind==='menu'">
-          <div v-if="ln.text"><span class="pfx">●</span><span>{{ ln.text }}</span></div>
-          <div class="tmenu tbox" style="border:none;box-shadow:none">
-            <div class="tmenu-opt" v-for="(opt,oi) in ln.options" :key="oi"
-              :class="{sel: ln.done && ln.chosen===oi}"
-              @click="!ln.done && onMenuPick(ln, oi)">
-              <span class="k">[{{ oi+1 }}]</span>{{ opt.label }}
+          <template v-if="ln.done">
+            <div class="tline role-user"><span class="pfx">▸</span><span>{{ ln.options[ln.chosen].label }}</span></div>
+          </template>
+          <template v-else>
+            <div v-if="ln.text"><span class="pfx">●</span><span>{{ ln.text }}</span></div>
+            <div class="tmenu tbox" style="border:none;box-shadow:none">
+              <div class="tmenu-opt" v-for="(opt,oi) in ln.options" :key="oi"
+                @click="onMenuPick(ln, oi)">
+                <span class="k">[{{ oi+1 }}]</span>{{ opt.label }}
+              </div>
             </div>
-          </div>
+          </template>
         </template>
 
         <!-- 圖表泡泡 -->
@@ -678,12 +737,33 @@
             <div class="tbox-title">┌─ 自己選資料</div>
             <div class="tbox-body">
               <div style="margin-bottom:8px">
-                <div style="color:var(--term-dim);font-size:12px;margin-bottom:4px">調查年度</div>
-                <el-segmented v-model="year" :options="yearOptions" :disabled="ln.done" @change="onYearChange" />
+                <div style="color:var(--term-dim);font-size:12px;margin-bottom:4px">調查年度（可複選啟用播放）</div>
+                <el-checkbox-group v-model="playback.selectedYears" :disabled="ln.done || playback.isPlaying" @change="onYearsChange">
+                  <el-checkbox-button v-for="y in yearOptions" :key="y.value" :value="y.value">{{ y.label }}</el-checkbox-button>
+                </el-checkbox-group>
+                <div v-if="playback.selectedYears.length > 1" style="margin-top:8px">
+                  <div style="color:var(--term-dim);font-size:11px">
+                    ▸ {{ playback.currentIndex + 1 }}/{{ playback.selectedYears.length }}：{{ playback.selectedYears[playback.currentIndex] }}
+                    <span v-if="playback.preloadProgress < 100" style="color:#e6a23c;margin-left:8px">
+                      <i class="fa-solid fa-spinner fa-spin"></i> 預載中 {{ playback.preloadProgress }}%
+                    </span>
+                  </div>
+                  <div style="display:flex;gap:6px;margin-top:4px">
+                    <el-button size="small" @click="playbackPrev" :disabled="playback.currentIndex === 0 || playback.isPlaying || ln.done">
+                      <i class="fa-solid fa-backward-step"></i>
+                    </el-button>
+                    <el-button size="small" type="success" @click="playbackToggle" :disabled="ln.done">
+                      <i :class="playback.isPlaying ? 'fa-solid fa-pause' : 'fa-solid fa-play'"></i>
+                    </el-button>
+                    <el-button size="small" @click="playbackNext" :disabled="playback.currentIndex >= playback.selectedYears.length - 1 || playback.isPlaying || ln.done">
+                      <i class="fa-solid fa-forward-step"></i>
+                    </el-button>
+                  </div>
+                </div>
               </div>
               <div style="margin-bottom:8px">
                 <div style="color:var(--term-dim);font-size:12px;margin-bottom:4px">議題欄位（可複選，X 軸固定為出生年代）</div>
-                <el-checkbox-group v-model="selectedFields" :disabled="ln.done" @change="onFieldsChange">
+                <el-checkbox-group v-model="selectedFields" :disabled="ln.done || playback.isPlaying" @change="onFieldsChange">
                   <el-checkbox-button v-for="o in fieldOptions" :key="o.value" :value="o.value">{{ o.label }}</el-checkbox-button>
                 </el-checkbox-group>
                 <!-- 篩選／標記入口：跟傳統板同一個 dialog／同一組函式，只是換終端機外觀。
@@ -739,17 +819,22 @@
           </div>
         </template>
 
-        <!-- S7a：AI 出題題型選擇泡泡 -->
+        <!-- S7a：AI 出題題型選擇泡泡：選完後只顯示選中的文字 -->
         <template v-else-if="ln.kind==='quiztype'">
-          <div class="tbox" :class="{'egg-fly': ln.flying}">
-            <div class="tbox-title">┌─ 選題型（出題方向可先打在下面輸入框，選填）</div>
-            <div class="tbox-body tmenu">
-              <div class="tmenu-opt" v-for="(t,ti) in quizTypes" :key="ti"
-                :class="{sel: ln.done && ln.chosen===t}" @click="!ln.done && aiQuizTypePick(ln, t)">
-                <span class="k">[{{ ti+1 }}]</span>{{ t }}
+          <template v-if="ln.done">
+            <div class="tline role-user"><span class="pfx">▸</span><span>題型：{{ ln.chosen }}</span></div>
+          </template>
+          <template v-else>
+            <div class="tbox" :class="{'egg-fly': ln.flying}">
+              <div class="tbox-title">┌─ 選題型（出題方向可先打在下面輸入框，選填）</div>
+              <div class="tbox-body tmenu">
+                <div class="tmenu-opt" v-for="(t,ti) in quizTypes" :key="ti"
+                  @click="aiQuizTypePick(ln, t)">
+                  <span class="k">[{{ ti+1 }}]</span>{{ t }}
+                </div>
               </div>
             </div>
-          </div>
+          </template>
         </template>
 
         <!-- S8/S10：題目 + 作答 -->
@@ -786,23 +871,30 @@
           </div>
         </template>
 
-        <!-- S12：滿意度評分（哭臉→笑臉，點一下＝定案往下走） -->
+        <!-- S12：滿意度評分：選完後只顯示選中的表情 -->
         <template v-else-if="ln.kind==='rate'">
-          <div class="tbox" :class="{'egg-cheer': ln.cheer, 'egg-sad': ln.sad}">
-            <div class="tbox-title">┌─ 這次批改滿意嗎？（點臉給分，點完就繼續）</div>
-            <div class="tbox-body">
-              <div class="trate-faces">
-                <span v-for="n in 5" :key="n" class="rate-face" :class="{active: ln.rate===n}"
-                  :style="ln.done && ln.rate!==n ? 'pointer-events:none' : ''"
-                  @click="!ln.done && onRateChange(ln, n)">{{ ['😭','🙁','😐','🙂','😄'][n-1] }}</span>
-              </div>
-              <div style="margin-top:8px">
-                <el-button size="small" :disabled="ln.done" @click="regradeFromRate(ln)">
-                  <i class="fa-solid fa-rotate-right"></i>&nbsp; 先不評分，給意見請 AI 再批改一次
-                </el-button>
+          <template v-if="ln.done && ln.rate">
+            <div class="tline role-user"><span class="pfx">▸</span><span>評分：{{ ['😭','🙁','😐','🙂','😄'][ln.rate-1] }}</span></div>
+          </template>
+          <template v-else-if="ln.done && !ln.rate">
+            <div class="tline role-user"><span class="pfx">▸</span><span>請求重新批改</span></div>
+          </template>
+          <template v-else>
+            <div class="tbox" :class="{'egg-cheer': ln.cheer, 'egg-sad': ln.sad}">
+              <div class="tbox-title">┌─ 這次批改滿意嗎？（點臉給分，點完就繼續）</div>
+              <div class="tbox-body">
+                <div class="trate-faces">
+                  <span v-for="n in 5" :key="n" class="rate-face" :class="{active: ln.rate===n}"
+                    @click="onRateChange(ln, n)">{{ ['😭','🙁','😐','🙂','😄'][n-1] }}</span>
+                </div>
+                <div style="margin-top:8px">
+                  <el-button size="small" @click="regradeFromRate(ln)">
+                    <i class="fa-solid fa-rotate-right"></i>&nbsp; 先不評分，給意見請 AI 再批改一次
+                  </el-button>
+                </div>
               </div>
             </div>
-          </div>
+          </template>
         </template>
 
       </div>
@@ -980,6 +1072,7 @@ async function callWorkerStream(messages, tools, maxTokens, onDelta) {
     var buf = '';
     var content = '', reasoning = '';
     var toolCallsAcc = [];
+    var finishReason = null;
 
     while (true) {
       var chunk = await reader.read();
@@ -996,7 +1089,9 @@ async function callWorkerStream(messages, tools, maxTokens, onDelta) {
           if (payload === '[DONE]') continue;
           var evt;
           try { evt = JSON.parse(payload); } catch (e) { continue; }
-          var delta = evt.choices && evt.choices[0] && evt.choices[0].delta;
+          var choice = evt.choices && evt.choices[0];
+          if (choice && choice.finish_reason) finishReason = choice.finish_reason;
+          var delta = choice && choice.delta;
           if (!delta) continue;
           if (delta.content) { content += delta.content; if (onDelta) onDelta({ content: content, reasoning: reasoning }); }
           if (delta.reasoning_content) { reasoning += delta.reasoning_content; if (onDelta) onDelta({ content: content, reasoning: reasoning }); }
@@ -1014,11 +1109,12 @@ async function callWorkerStream(messages, tools, maxTokens, onDelta) {
         }
       }
     }
-    console.log('[Worker debug] 串流結束，耗時 ' + (Date.now() - t0) + 'ms');
+    console.log('[Worker debug] 串流結束，耗時 ' + (Date.now() - t0) + 'ms, finish_reason=' + finishReason);
     return {
       content: content.trim(),
       reasoning_content: reasoning.trim(),
-      tool_calls: toolCallsAcc.length ? toolCallsAcc.filter(Boolean) : null
+      tool_calls: toolCallsAcc.length ? toolCallsAcc.filter(Boolean) : null,
+      finish_reason: finishReason
     };
   }
 
@@ -1036,16 +1132,28 @@ async function callWorkerStream(messages, tools, maxTokens, onDelta) {
 // dispatcher 可為 async function，資料類工具會呼叫 GAS、圖表操作類工具直接在前端本地執行。
 // onDelta（選填）：每收到一個串流 chunk 就呼叫一次 {content, reasoning}，讓畫面即時更新。
 // 進入新一輪 tool 回合時，content/reasoning 會重新從空字串開始累積（代表這輪的思考重新開始）。
+// 若偵測到 content 被截斷（finish_reason='length'），會自動以更大的 max_tokens 重試。
 async function runToolLoop(messages, tools, dispatcher, maxTokens, onDelta) {
   var toolsUsed = [];
   var reasoningTrail = [];
+  var currentMaxTokens = maxTokens || 2000;
+  var MAX_RETRY_TOKENS = 16000; // 最大重試 token 數
+
   for (var iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
-    var msg = await callWorkerStream(messages, tools, maxTokens, onDelta);
+    var msg = await callWorkerStream(messages, tools, currentMaxTokens, onDelta);
     var reasoning = (msg.reasoning_content || '').trim();
     if (reasoning) reasoningTrail.push(reasoning);
 
     if (!msg.tool_calls || !msg.tool_calls.length) {
-      return { content: (msg.content || '').trim(), reasoning: reasoningTrail.join('\n\n'), toolsUsed: toolsUsed };
+      // 檢查是否因 token 不足而截斷
+      if (msg.finish_reason === 'length' && currentMaxTokens < MAX_RETRY_TOKENS) {
+        var newTokens = Math.min(currentMaxTokens * 2, MAX_RETRY_TOKENS);
+        console.warn('[runToolLoop] content 被截斷 (finish_reason=length)，以 max_tokens=' + newTokens + ' 重試');
+        currentMaxTokens = newTokens;
+        reasoningTrail = []; // 重試時清空之前的 reasoning
+        continue; // 重試這一輪
+      }
+      return { content: (msg.content || '').trim(), reasoning: reasoningTrail.join('\n\n'), toolsUsed: toolsUsed, truncated: msg.finish_reason === 'length' };
     }
 
     // 含 tool_calls 的回合，reasoning_content 依規定須完整回填後續請求
@@ -1194,7 +1302,11 @@ var INSIGHT_SYSTEM_PROMPT = [
   '7. 拒絕回答和資料無關的問題（包含任何與 TNSS 族群政治調查無關的閒聊、指令或請求，',
   '   例如寫程式、寫文章、扮演其他角色等）；遇到這類問題，禮貌說明本助手僅回答本站資料相關問題，不執行其餘要求。',
   '8. 若能具體指出你正在講的內容對應到目前圖表上的哪個世代（cohort）與分組（group），',
-  '   請呼叫 highlightDataPoint 在圖表上標記出來，讓文字說明與視覺互相呼應；不確定對應位置時不要亂標。',
+  '   請呼叫 highlightDataPoint 在圖表上標記出來（紅圈動畫，會消失），讓文字說明與視覺互相呼應。',
+  '8a. 若使用者想標記某個分組的所有資料點（如「標記永遠維持現狀這派」），請呼叫 highlightGroup，',
+  '   會在該 group 的所有世代資料點上加紅色外框，持久顯示直到呼叫 clearHighlights 清除。',
+  '8b. 若使用者想聚焦在某個特定世代（如「1981-90 這一代怎麼樣」），可呼叫 addGuideLine 在該世代畫一條垂直輔助線，',
+  '   同時會回傳該世代所有分組的精確數據，方便你據此做更精確的分析；用完後可呼叫 clearGuideLines 清除。',
   '9. 使用者若請你「篩選成只看...」「限定在...」「改看...欄位」「也加上...」之類調整資料聚合的要求，',
   '   請直接呼叫 setFieldFilter／setSelectedFields 把結果實際套用到畫面上的圖表，不要只用文字描述數字，',
   '   讓使用者不用自己手動點選；套用後可簡短說明你做了什麼調整。',
@@ -1202,11 +1314,28 @@ var INSIGHT_SYSTEM_PROMPT = [
   '    與要顯示的欄位（setSelectedFields）。當使用者表達想看某年、某主題的資料時：',
   '    (a) 若他只給了年份沒給欄位，先呼叫 listFields 告訴他有哪些欄位可挑，並詢問他想看哪一個；',
   '    (b) 若他只給了主題沒給年份，先呼叫 listYears 或直接用最新年度，並向他確認；',
-  '    (c) 一旦年度與欄位都清楚了，務必呼叫 setSelectedYear 設定年度、再呼叫 setSelectedFields 設定欄位，',
-  '        圖表才會真的出現──只用文字描述數字、卻不呼叫這兩個工具，畫面上不會有任何圖，等於沒完成任務。',
+  '    (c) 一旦年度與欄位都清楚了，先用白話向使用者說明你理解的需求，格式如：',
+  '        「為你查看 [YYYY年] [各族群/某族群] 對 [XXX議題] 的看法 [在某條件下]，開始繪圖...」',
+  '        然後呼叫 setSelectedYear 設定年度、setSelectedFields 設定欄位。',
+  '        如果條件較複雜或不確定使用者意圖，可呼叫 askChoice 讓使用者選擇確認或修改。',
+  '        圖表只有在呼叫這兩個工具後才會出現──只用文字描述數字、卻不呼叫，畫面上不會有任何圖。',
   '    (d) 欄位名要用 listFields 回傳的英文欄位名（如 unif_indep_stance），不要用中文標籤當參數。',
   '10. 你最終輸出給使用者看的回覆，只能是精簡的答案本身；呼叫工具前的判斷、資料核對等推理過程，',
-  '    只能在內部思考進行，絕對不要把這些過程用文字寫進看得見的回覆內容裡。'
+  '    只能在內部思考進行，絕對不要把這些過程用文字寫進看得見的回覆內容裡。',
+  '12. 當使用者提出關於族群或世代的假設、觀點或好奇（例如「我覺得外省人比較偏統」「年輕人是不是比較支持台獨？」',
+  '    「這份資料能看出什麼有趣的東西？」），請：',
+  '    (a) 先判斷這個假設對應到哪個欄位（例如統獨立場→unif_indep_stance）；',
+  '    (b) 呼叫 setSelectedYear + setSelectedFields 把對應的圖畫出來，讓使用者直接看到資料分布；',
+  '    (c) 用 getCohortBreakdown 取得數據後，簡要說明資料是否支持使用者的假設，並指出關鍵數字。',
+  '    重點是「用圖表展示統計」讓使用者自己看到，而不只是用文字描述。',
+  '13. 當使用者想了解整體資料概況、比較多個年度、或問「這幾年的趨勢是什麼」時，',
+  '    可呼叫 overview 工具一次取得多年度的資料摘要，再據此分析並回答。',
+  '14. 【善用選擇題】當你需要使用者回答問題時，優先考慮用 askChoice 做成選擇題而非純文字問答：',
+  '    (a) 適合情境：選年度、選欄位、選方向、確認操作、二選一等有明確選項的問題；',
+  '    (b) 選項設計：把最可能的答案列出來（2-4 個為佳），讓使用者一鍵選擇；',
+  '    (c) allowOther 參數：若選項可能不完整，可設 allowOther=true 加入「其他」讓使用者自行輸入，',
+  '        但請謹慎使用——使用者可能輸入你無法處理的內容，一般情況不要加；',
+  '    (d) 好處：降低使用者輸入成本、減少歧義、加快互動流程。'
 ].join('\n');
 
 // 拒答守則（寫死、不可被使用者可編輯的 defaultPrompt 覆蓋）。
@@ -1305,8 +1434,46 @@ function insightToolDeclarations() {
     {
       type: 'function',
       function: {
+        name: 'highlightGroup',
+        description: '在圖表上標記某個分組（group）的所有資料點，適合用於「標記這一派的所有資料」等需求。' +
+          '會在該分組的所有世代資料點上畫持久的紅色外框，直到呼叫 clearHighlights 清除。',
+        parameters: {
+          type: 'object',
+          properties: {
+            group: { type: 'string', description: '要標記的分組名稱，須與圖例名稱完全一致（如「永遠維持現狀」）' }
+          },
+          required: ['group']
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
         name: 'clearHighlights',
         description: '清除目前圖表上所有的標記／高亮，畫面回到原本狀態。開始討論新主題前可視情況呼叫。',
+        parameters: { type: 'object', properties: {} }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'addGuideLine',
+        description: '在圖表上指定的出生世代（cohort）繪製一條垂直輔助線，同時回傳該世代所有分組的資料切面。' +
+          '可用於：(1) 視覺上標示某個關鍵世代 (2) 擷取該世代的精確數據做進一步分析。',
+        parameters: {
+          type: 'object',
+          properties: {
+            cohort: { type: 'string', description: '要繪製輔助線的出生世代，如 1981-90、1950s' }
+          },
+          required: ['cohort']
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'clearGuideLines',
+        description: '清除目前圖表上所有的輔助線。',
         parameters: { type: 'object', properties: {} }
       }
     },
@@ -1359,6 +1526,42 @@ function insightToolDeclarations() {
           required: ['fields']
         }
       }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'overview',
+        description: '取得指定年度的整體資料概覽，包含各欄位在各世代的分布統計。' +
+          '適合用來快速了解某年或跨年的整體資料樣貌，或比較不同年度之間的變化趨勢。' +
+          '當使用者想了解整體資料概況、比較多個年度、或問「這幾年的趨勢是什麼」時，可呼叫此工具。',
+        parameters: {
+          type: 'object',
+          properties: {
+            years: { type: 'array', items: { type: 'string' }, description: '要查看的年度陣列，如 ["2022", "2023"]。可傳多年做跨年度比較' },
+            fields: { type: 'array', items: { type: 'string' }, description: '要查看的欄位陣列（可選）。留空則回傳所有可用欄位的摘要' }
+          },
+          required: ['years']
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'askChoice',
+        description: '向使用者提問並提供選項讓他選擇，會彈出選單 UI。適合用於需要使用者做決定的情境，' +
+          '例如確認操作、選擇方向、選擇年度/欄位等。回傳使用者選擇的選項索引與文字。' +
+          '如果 allowOther=true，選單會多一個「其他」選項，使用者選擇後可輸入自訂文字。' +
+          '注意：allowOther 僅在選項可能不完整時使用，一般情況不要加，以免使用者輸入無法處理的內容。',
+        parameters: {
+          type: 'object',
+          properties: {
+            question: { type: 'string', description: '要問使用者的問題' },
+            options: { type: 'array', items: { type: 'string' }, description: '選項陣列，如 ["選項A", "選項B"]' },
+            allowOther: { type: 'boolean', description: '是否加入「其他」選項讓使用者自行輸入（預設 false，請謹慎使用）' }
+          },
+          required: ['question', 'options']
+        }
+      }
     }
   ];
 }
@@ -1393,7 +1596,7 @@ createApp({
       'fa-solid fa-face-smile', 'fa-solid fa-face-grin-beam'];
     const rateVoidIcon = 'fa-solid fa-face-meh-blank';
     const state = reactive({
-      years: [], year: '', fieldsMeta: [], selectedFields: [], fieldFilters: {}, fieldHighlights: {},
+      years: [], year: '', fieldsMeta: [], selectedFields: [], fieldFilters: {}, fieldHighlights: {}, guideLines: [],
       filterDialog: { open: false, field: '', label: '', options: [], selected: [], highlighted: [] },
       chartType: 'line',
       chartTypeOptions: [
@@ -1431,6 +1634,18 @@ createApp({
         _dataChanged: false, // 分析對話中若 AI 動了資料（篩選/欄位/年度）就標記，之後重畫圖
         _analysisMsgs: null, // 分析階段的持續對話（帶 tool），每輪 runCycle 重置
         busy: false, running: false
+      },
+      // ---- 多年度播放 ----
+      playback: {
+        enabled: false,           // 多年度模式是否啟用
+        selectedYears: [],        // 已選年度陣列（已排序）
+        currentIndex: 0,          // 目前顯示的年度索引
+        isPlaying: false,         // 是否正在自動播放
+        intervalMs: 3000,         // 播放間隔（毫秒，1000-10000）
+        timerId: null,            // setInterval handle
+        preloadedData: {},        // { [year]: { columns, rows } } 預載資料
+        preloadProgress: 0,       // 預載進度 0-100
+        locked: false             // 播放中鎖定欄位選擇
       }
     });
 
@@ -1444,7 +1659,7 @@ createApp({
         state.fieldsMeta = fields;
         state.sourceUrl = url;
         applySettings(settings);
-        if (years.length) { state.year = years[years.length - 1]; await loadYear(); }
+        if (years.length) { state.year = years[years.length - 1]; state.playback.selectedYears = [state.year]; await loadYear(); }
       } catch (e) {
         ElementPlus.ElMessage.error('初始化失敗：' + (e.message || e) + '（請先於設定填入 Sheet ID）');
         state.settingsDialog = true;
@@ -1591,6 +1806,17 @@ createApp({
       const yLabel = fields.length === 1 ? `${fieldLabel(fields[0])}　各類別占比 (%)` : '各欄位類別占比 (%)';
       return { cohorts, series, focusLabel: yLabel, fields };
     }
+    // 取得指定世代的切面資料（供輔助線工具回傳）
+    function getSliceAtCohort(cohort) {
+      const bd = buildBreakdown();
+      if (!bd) return null;
+      const slice = {};
+      bd.series.forEach(s => {
+        const pt = s.points.find(p => p.cohort === cohort);
+        if (pt) slice[s.group] = { pct: pt.pct, n: pt.n };
+      });
+      return Object.keys(slice).length ? slice : null;
+    }
 
     // ---------- D3 繪圖 ----------
     // 純渲染：依目前 state（selectedFields / fieldFilters / chartType）把圖畫進傳入的 svg 元素，
@@ -1625,24 +1851,49 @@ createApp({
 
       if (state.chartType === 'bar') {
         const sub = d3.scaleBand().domain(bd.series.map(s => s.group)).range([0, x.bandwidth()]).padding(0.05);
-        bd.series.forEach(s => {
+        bd.series.forEach((s, si) => {
           g.selectAll('.bar-' + safe(s.group)).data(s.points.filter(p => p.pct != null)).enter()
-            .append('rect').attr('x', p => x(p.cohort) + sub(s.group)).attr('y', p => y(p.pct))
-            .attr('width', sub.bandwidth()).attr('height', p => ih - y(p.pct)).attr('fill', s.color)
-            .attr('opacity', s.dim ? 0.5 : 1)
+            .append('rect').attr('x', p => x(p.cohort) + sub(s.group))
+            .attr('y', ih).attr('height', 0) // 從底部開始
+            .attr('width', sub.bandwidth()).attr('fill', s.color)
+            .attr('opacity', s.dim ? 0.3 : 1)
             .classed('chart-bar', true).attr('data-cohort', p => p.cohort).attr('data-group', s.group)
-            .append('title').text(p => `${s.group} ${p.cohort}: ${p.pct}% (n=${p.n})`);
+            .transition().duration(600).delay((d, i) => si * 50 + i * 30)
+            .ease(d3.easeElasticOut.amplitude(1).period(0.4))
+            .attr('y', p => y(p.pct)).attr('height', p => ih - y(p.pct))
+            .selection().append('title').text(p => `${s.group} ${p.cohort}: ${p.pct}% (n=${p.n})`);
         });
       } else if (state.chartType === 'area') {
         const area = d3.area().x(p => x(p.cohort) + x.bandwidth() / 2).y0(ih).y1(p => y(p.pct || 0))
           .defined(p => p.pct != null).curve(d3.curveMonotoneX);
-        bd.series.forEach(s => {
-          g.append('path').datum(s.points).attr('fill', s.color).attr('opacity', s.dim ? 0.18 : 0.35).attr('d', area);
-          drawLine(g, s, x, y, ih);
+        bd.series.forEach((s, si) => {
+          g.append('path').datum(s.points).attr('fill', s.color).attr('opacity', s.dim ? 0.1 : 0.35).attr('d', area);
+          drawLine(g, s, x, y, ih, si);
         });
       } else {
-        bd.series.forEach(s => drawLine(g, s, x, y, ih));
+        bd.series.forEach((s, si) => drawLine(g, s, x, y, ih, si));
       }
+
+      // 繪製輔助線（垂直虛線）
+      state.guideLines.forEach(cohort => {
+        if (!bd.cohorts.includes(cohort)) return;
+        const xPos = x(cohort) + x.bandwidth() / 2;
+        g.append('line')
+          .attr('class', 'guide-line')
+          .attr('x1', xPos).attr('x2', xPos)
+          .attr('y1', 0).attr('y2', ih)
+          .attr('stroke', '#e74c3c')
+          .attr('stroke-width', 2)
+          .attr('stroke-dasharray', '6,4')
+          .attr('opacity', 0.8);
+        g.append('text')
+          .attr('class', 'guide-label')
+          .attr('x', xPos).attr('y', -6)
+          .attr('text-anchor', 'middle')
+          .attr('fill', '#e74c3c')
+          .attr('font-size', '11px')
+          .text(cohort);
+      });
 
       const legend = bd.series.map(s => ({ name: s.group, color: s.color, dim: s.dim }));
       // fields 只列「實際畫在圖上」的欄位（被拿去當 WHERE 篩選的欄位不算，避免跟 filters 重複、
@@ -1675,19 +1926,143 @@ createApp({
       autoDescribe();
     }
 
-    function drawLine(g, s, x, y, ih) {
-      const opacity = s.dim ? 0.5 : 1;
-      const line = d3.line().x(p => x(p.cohort) + x.bandwidth() / 2).y(p => y(p.pct))
+    function drawLine(g, s, x, y, ih, seriesIdx) {
+      const opacity = s.dim ? 0.3 : 1;
+      const delay = (seriesIdx || 0) * 80;
+      // 線條：從底部畫上來
+      const lineBottom = d3.line().x(p => x(p.cohort) + x.bandwidth() / 2).y(ih)
+        .defined(p => p.pct != null).curve(d3.curveMonotoneX);
+      const lineActual = d3.line().x(p => x(p.cohort) + x.bandwidth() / 2).y(p => y(p.pct))
         .defined(p => p.pct != null).curve(d3.curveMonotoneX);
       g.append('path').datum(s.points).attr('fill', 'none').attr('stroke', s.color)
-        .attr('stroke-width', 2.5).attr('opacity', opacity).attr('d', line);
+        .attr('stroke-width', 2.5).attr('opacity', opacity).attr('d', lineBottom)
+        .classed('chart-line', true).attr('data-group', s.group)
+        .transition().duration(700).delay(delay)
+        .ease(d3.easeElasticOut.amplitude(1).period(0.5))
+        .attr('d', lineActual);
+      // 圓點：從小彈大
       g.selectAll('.dot-' + safe(s.group)).data(s.points.filter(p => p.pct != null)).enter()
         .append('circle').attr('cx', p => x(p.cohort) + x.bandwidth() / 2).attr('cy', p => y(p.pct))
-        .attr('r', 3.5).attr('fill', s.color).attr('opacity', opacity)
+        .attr('r', 0).attr('fill', s.color).attr('opacity', opacity)
         .classed('chart-point', true).attr('data-cohort', p => p.cohort).attr('data-group', s.group)
-        .append('title').text(p => `${s.group} ${p.cohort}: ${p.pct}% (n=${p.n})`);
+        .transition().duration(500).delay((d, i) => delay + i * 40)
+        .ease(d3.easeElasticOut.amplitude(1.2).period(0.4))
+        .attr('r', 3.5)
+        .selection().append('title').text(p => `${s.group} ${p.cohort}: ${p.pct}% (n=${p.n})`);
     }
     function safe(s) { return String(s).replace(/[^a-zA-Z0-9]/g, '_'); }
+
+    // 跳繩動畫：讓線段在固定端點間上下彈跳
+    function jumpRopeLine(pathSel) {
+      const path = pathSel.node();
+      if (!path) return;
+      const originalD = pathSel.attr('d');
+      if (!originalD) return;
+
+      // 解析路徑取得關鍵點座標
+      const len = path.getTotalLength();
+      const numSamples = 20;
+      const points = [];
+      for (let i = 0; i <= numSamples; i++) {
+        const pt = path.getPointAtLength((i / numSamples) * len);
+        points.push({ x: pt.x, y: pt.y, origY: pt.y });
+      }
+
+      // 動畫：波浪向外傳遞並衰減
+      let frame = 0;
+      const totalFrames = 40;
+      const amplitude = 15;
+
+      function animate() {
+        frame++;
+        const progress = frame / totalFrames;
+        const decay = 1 - progress;
+
+        // 每個點加上正弦波偏移（中間振幅大，兩端小）
+        const newPoints = points.map((p, i) => {
+          const relPos = i / numSamples; // 0~1
+          const edgeFade = Math.sin(relPos * Math.PI); // 兩端為0，中間為1
+          const wave = Math.sin(progress * Math.PI * 4 - relPos * Math.PI * 2);
+          const offset = wave * amplitude * edgeFade * decay;
+          return { x: p.x, y: p.origY + offset };
+        });
+
+        // 重建路徑
+        const newD = 'M' + newPoints.map(p => `${p.x},${p.y}`).join('L');
+        pathSel.attr('d', newD);
+
+        if (frame < totalFrames) {
+          requestAnimationFrame(animate);
+        } else {
+          // 動畫結束，恢復原始路徑
+          pathSel.attr('d', originalD);
+        }
+      }
+
+      requestAnimationFrame(animate);
+    }
+
+    // ========== 多年度播放 ==========
+    async function onYearsChange(selected) {
+      const sorted = [...selected].sort();
+      state.playback.selectedYears = sorted;
+      if (sorted.length <= 1) {
+        state.playback.enabled = false;
+        state.playback.currentIndex = 0;
+        stopPlayback();
+        if (sorted.length === 1) { state.year = sorted[0]; await loadYear(); }
+      } else {
+        state.playback.enabled = true;
+        state.playback.currentIndex = 0;
+        state.year = sorted[0];
+        await loadYear();
+        preloadYears(sorted);
+      }
+    }
+    async function preloadYears(years) {
+      state.playback.preloadProgress = 0;
+      state.playback.preloadedData = {};
+      let loaded = 0;
+      for (const y of years) {
+        try { state.playback.preloadedData[y] = await api.getYearData(y); }
+        catch (e) { console.warn('預載失敗：' + y, e); }
+        loaded++;
+        state.playback.preloadProgress = Math.round((loaded / years.length) * 100);
+      }
+      if (state.playback.preloadProgress === 100) triggerMultiYearAnalysis();
+    }
+    function switchToYearIndex(idx) {
+      const years = state.playback.selectedYears;
+      if (idx < 0 || idx >= years.length) return;
+      state.playback.currentIndex = idx;
+      const targetYear = years[idx];
+      state.year = targetYear;
+      const preloaded = state.playback.preloadedData[targetYear];
+      if (preloaded) {
+        const cols = preloaded.columns;
+        state.rows = preloaded.rows.map(r => { const o = {}; cols.forEach((c, i) => o[c] = r[i]); return o; });
+        if (state.uiMode === 'terminal') redrawTermCharts(); else drawChart();
+      } else { loadYear(); }
+    }
+    function playbackToggle() { if (state.playback.isPlaying) stopPlayback(); else startPlayback(); }
+    function startPlayback() {
+      if (state.playback.selectedYears.length <= 1) return;
+      if (state.playback.preloadProgress < 100) { ElementPlus.ElMessage.warning('資料預載中，請稍候…'); return; }
+      state.playback.isPlaying = true;
+      state.playback.locked = true;
+      state.playback.timerId = setInterval(() => {
+        const next = state.playback.currentIndex + 1;
+        if (next >= state.playback.selectedYears.length) switchToYearIndex(0);
+        else switchToYearIndex(next);
+      }, state.playback.intervalMs);
+    }
+    function stopPlayback() {
+      state.playback.isPlaying = false;
+      state.playback.locked = false;
+      if (state.playback.timerId) { clearInterval(state.playback.timerId); state.playback.timerId = null; }
+    }
+    function playbackPrev() { if (state.playback.currentIndex > 0) switchToYearIndex(state.playback.currentIndex - 1); }
+    function playbackNext() { if (state.playback.currentIndex < state.playback.selectedYears.length - 1) switchToYearIndex(state.playback.currentIndex + 1); }
 
     // ---------- Insight 助手：把 chartActions 套用到目前畫面的圖表上 ----------
     function applyChartAction(action) {
@@ -1717,6 +2092,29 @@ createApp({
       if (action.type === 'clear') {
         sel.selectAll('.point-highlight').remove();
         sel.selectAll('.chart-bar').classed('bar-highlighted', false);
+        sel.selectAll('.chart-point').classed('group-highlighted', false);
+        sel.selectAll('.chart-line').classed('line-highlighted', false);
+        return;
+      }
+      if (action.type === 'highlightGroup') {
+        // 標記整個 group 的所有資料點（持久，不會消失）
+        sel.selectAll('circle.chart-point').each(function () {
+          if (this.getAttribute('data-group') === action.group) {
+            d3.select(this).classed('group-highlighted', true);
+          }
+        });
+        sel.selectAll('rect.chart-bar').each(function () {
+          if (this.getAttribute('data-group') === action.group) {
+            d3.select(this).classed('bar-highlighted', true);
+          }
+        });
+        // 標記並彈跳線段
+        sel.selectAll('path.chart-line').each(function () {
+          if (this.getAttribute('data-group') === action.group) {
+            d3.select(this).classed('line-highlighted', true);
+            jumpRopeLine(d3.select(this));
+          }
+        });
         return;
       }
       if (action.type !== 'highlight' || !action.cohort) return;
@@ -1753,7 +2151,7 @@ createApp({
         console.log('[autoDescribe] 開始，myGen=' + myGen);
         const stopTimer = startElapsedTimer(el => { if (myGen === state.descGen) state.descElapsed = el; });
         try {
-          const summary = chartSummaryText(payload, state.fieldsMeta);
+          const summary = getChartSummaryForAI();
           const messages = [
             { role: 'system', content: state.settings.defaultPrompt }, { role: 'system', content: TOPIC_GUARD },
             { role: 'user', content: '以下是使用者當前篩選出的圖表資料摘要，請據此撰寫 100 字內的中文描述：\n\n' + summary }
@@ -1775,6 +2173,80 @@ createApp({
       state.descGen++; // 讓進行中的呼叫在拿到結果時被判定為過期而捨棄
       state.descLoading = false;
       state.aiDescription = '（已取消等待，可按「重新產生描述」再試一次）';
+    }
+
+    // 輔助函式：用指定的 rows 和 fields 計算 breakdown（不影響 state）
+    function buildBreakdownWith(rows, fields) {
+      if (!fields) fields = state.selectedFields.filter(f => !(state.fieldFilters[f] && state.fieldFilters[f].length));
+      if (!fields.length || !rows.length) return null;
+      const filteredRows = applyFilters(rows);
+      const cohortsSet = {};
+      const series = [];
+      let colorIdx = 0;
+      fields.forEach(f => {
+        const bd = fieldCategoryBreakdown(filteredRows, f);
+        bd.cohorts.forEach(c => cohortsSet[c] = true);
+        bd.series.forEach(s => {
+          const label = fields.length > 1 ? `${fieldLabel(f)}：${s.category}` : s.category;
+          series.push({ group: label, color: colorForCategory(f, s.category, colorIdx++), dim: false, points: s.points });
+        });
+      });
+      const cohorts = COHORT_ORDER.filter(c => cohortsSet[c]);
+      return { cohorts, series, fields };
+    }
+
+    // 取得給 AI 的圖表摘要（單年度用 lastChartPayload，多年度彙整所有年度）
+    function getChartSummaryForAI() {
+      if (!state.playback.enabled || state.playback.selectedYears.length <= 1) {
+        return chartSummaryText(state.lastChartPayload, state.fieldsMeta);
+      }
+      return state.playback.selectedYears.map(year => {
+        const data = state.playback.preloadedData[year];
+        if (!data) return null;
+        const cols = data.columns;
+        const rows = data.rows.map(r => { const o = {}; cols.forEach((c, i) => o[c] = r[i]); return o; });
+        const bd = buildBreakdownWith(rows);
+        if (!bd) return null;
+        const lines = [`【${year}年】`, `欄位：${bd.fields.map(fieldLabel).join('、')}`];
+        bd.series.forEach(s => {
+          const validPts = s.points.filter(p => p.pct != null);
+          if (validPts.length) {
+            const ptStr = validPts.map(p => `${p.cohort}=${p.pct}%`).join(', ');
+            lines.push(`  ${s.group}：${ptStr}`);
+          }
+        });
+        return lines.join('\n');
+      }).filter(Boolean).join('\n\n');
+    }
+
+    // 多年度整體 AI 分析（預載完成後觸發一次）
+    async function triggerMultiYearAnalysis() {
+      if (!state.settings.aiEnabled) return;
+      if (!state.selectedFields.length) return;
+      state.aiDescription = ''; state.aiReasoning = ''; state.descLoading = true; state.descEmpty = false;
+      const myGen = ++state.descGen;
+      const stopTimer = startElapsedTimer(el => { if (myGen === state.descGen) state.descElapsed = el; });
+      try {
+        const combinedSummary = getChartSummaryForAI();
+        const messages = [
+          { role: 'system', content: state.settings.defaultPrompt }, { role: 'system', content: TOPIC_GUARD },
+          { role: 'user', content: [
+            '以下是多個年度的圖表資料摘要，請分析跨年度的趨勢變化，撰寫 150 字內的中文描述：',
+            '重點放在：(1) 哪些族群的態度有明顯變化？(2) 世代之間的差異是否隨時間縮小或擴大？',
+            '', combinedSummary
+          ].join('\n') }
+        ];
+        const res = await runToolLoop(messages, null, null, 1200, d => {
+          if (myGen !== state.descGen) return;
+          state.aiReasoning = d.reasoning; state.aiDescription = d.content;
+        });
+        if (myGen !== state.descGen) return;
+        state.aiReasoning = res.reasoning; state.aiDescription = res.content;
+        state.descEmpty = !res.content || !res.content.trim();
+      } catch (e) {
+        if (myGen !== state.descGen) return;
+        state.aiDescription = '（AI 跨年度分析失敗：' + (e.message || e) + '）';
+      } finally { stopTimer(); if (myGen === state.descGen) state.descLoading = false; }
     }
 
     // ---------- 出題 / 批改 ----------
@@ -1849,7 +2321,7 @@ createApp({
     async function runTeacherReview(item) {
       item.teacherReviewLoading = true; item.teacherReview = ''; item.teacherReviewReasoning = ''; item.teacherReviewEmpty = false;
       try {
-        const summary = chartSummaryText(state.lastChartPayload, state.fieldsMeta);
+        const summary = getChartSummaryForAI();
         const reviewSubject = [
           item.display,
           item.options ? item.options.map(o => `${o.label}. ${o.text}`).join('\n') : '',
@@ -1900,7 +2372,7 @@ createApp({
       const stopTimer = startElapsedTimer(el => { if (myOp === state.quiz.genOp) state.quiz.elapsed = el; });
       try {
         const qNum = state.quiz.questionsCount + 1;
-        const summary = chartSummaryText(state.lastChartPayload, state.fieldsMeta);
+        const summary = getChartSummaryForAI();
         const userText = [
           '請依據以下圖表資料只出「一題」（這是第 ' + qNum + ' 題）。',
           '只需要輸出這一題本身，不要輸出其他題目、不要加總題號說明或前言。',
@@ -2103,6 +2575,24 @@ createApp({
         return { ok: true, cohort: action.cohort, group: action.group };
       }
       if (name === 'clearHighlights') { applyChartAction({ type: 'clear' }); return { ok: true }; }
+      if (name === 'highlightGroup') {
+        const group = String(args.group || '');
+        applyChartAction({ type: 'highlightGroup', group });
+        return { ok: true, group };
+      }
+      if (name === 'addGuideLine') {
+        const cohort = String(args.cohort || '');
+        if (!state.guideLines.includes(cohort)) state.guideLines = [...state.guideLines, cohort];
+        drawChart();
+        // 回傳該世代的切面資料
+        const slice = getSliceAtCohort(cohort);
+        return { ok: true, cohort, slice };
+      }
+      if (name === 'clearGuideLines') {
+        state.guideLines = [];
+        drawChart();
+        return { ok: true };
+      }
       if (name === 'setFieldFilter') {
         const field = String(args.field || '');
         if (!state.fieldsMeta.some(m => m.field === field)) return { error: '未知欄位：' + field };
@@ -2121,10 +2611,92 @@ createApp({
         applyChartAction({ type: 'setFields', fields });
         return { ok: true, fields };
       }
+      if (name === 'overview') {
+        const years = (args.years || []).map(String);
+        const fields = args.fields ? args.fields.map(String) : state.fieldsMeta.map(f => f.field);
+        const results = [];
+        for (const year of years) {
+          let data = state.playback.preloadedData[year];
+          if (!data) data = await api.getYearData(year);
+          const cols = data.columns;
+          const rows = data.rows.map(r => { const o = {}; cols.forEach((c, i) => o[c] = r[i]); return o; });
+          const fieldSummaries = fields.map(field => {
+            const bd = buildBreakdownWith(rows, [field]);
+            return { field, label: fieldLabelFrom(state.fieldsMeta, field), cohorts: bd.cohorts,
+              series: bd.series.map(s => ({ group: s.group, points: s.points.map(p => ({ cohort: p.cohort, pct: p.pct, n: p.n })) })) };
+          });
+          results.push({ year, totalSamples: rows.length, fields: fieldSummaries });
+        }
+        return { years: results };
+      }
+      if (name === 'askChoice') {
+        const question = String(args.question || '請選擇');
+        const options = (args.options || []).map(String);
+        const allowOther = !!args.allowOther;
+        if (options.length < 2) return { error: '至少需要兩個選項' };
+        // 用 HTML 建立選項清單
+        const allOpts = allowOther ? [...options, '其他（自行輸入）'] : options;
+        const listHtml = allOpts.map((o, i) => `<div style="padding:6px 0;cursor:pointer" class="ask-opt" data-idx="${i}">[${i + 1}] ${o}</div>`).join('');
+        const html = `<div style="margin-bottom:8px">${question}</div><div style="border:1px solid #dcdfe6;border-radius:4px;padding:8px 12px">${listHtml}</div>`;
+        return new Promise(resolve => {
+          const box = ElementPlus.ElMessageBox({
+            title: 'AI 助手詢問', message: html, dangerouslyUseHTMLString: true,
+            showConfirmButton: false, showCancelButton: true, cancelButtonText: '取消',
+            distinguishCancelAndClose: true,
+            beforeClose: (action, instance, done) => {
+              if (action === 'cancel' || action === 'close') {
+                done();
+                resolve({ chosenIndex: -1, chosenOption: null, cancelled: true });
+              }
+            }
+          }).catch(() => {});
+          // 綁定點擊事件
+          setTimeout(() => {
+            document.querySelectorAll('.ask-opt').forEach(el => {
+              el.addEventListener('mouseenter', () => el.style.background = '#f5f7fa');
+              el.addEventListener('mouseleave', () => el.style.background = '');
+              el.addEventListener('click', async () => {
+                const idx = parseInt(el.dataset.idx);
+                ElementPlus.ElMessageBox.close();
+                if (allowOther && idx === options.length) {
+                  // 選了「其他」，彈出輸入框
+                  try {
+                    const { value } = await ElementPlus.ElMessageBox.prompt('請輸入：', '自訂內容', { confirmButtonText: '確定', cancelButtonText: '取消' });
+                    resolve({ chosenIndex: idx, chosenOption: value || '', isOther: true, otherText: value || '' });
+                  } catch { resolve({ chosenIndex: -1, chosenOption: null, cancelled: true }); }
+                } else {
+                  resolve({ chosenIndex: idx, chosenOption: options[idx] });
+                }
+              });
+            });
+          }, 100);
+        });
+      }
       return { error: '未知函式：' + name };
     }
     async function sendInsight() {
       const text = state.insight.input.trim(); if (!text) return;
+      // DEMO 指令：隨機年份 + 父親省籍，展示範例圖表
+      if (text.toUpperCase() === 'DEMO') {
+        state.insight.input = '';
+        state.insight.messages.push({ role: 'user', text: 'DEMO' });
+        const randomYear = state.years[Math.floor(Math.random() * state.years.length)];
+        state.year = randomYear;
+        state.selectedFields = ['father_ethnicity'];
+        state.fieldFilters = {};
+        await loadYear();
+        drawChart();
+        state.insight.messages.push({
+          role: 'model',
+          text: '好，讓我隨機挑一個年份給你看看。\n\n' +
+            '這是 **' + randomYear + ' 年**的資料，顯示的是「父親省籍」在各世代的分布。\n\n' +
+            '你可以觀察「大陸各省市人」這條線——隨著世代推移，比例有什麼變化？\n\n' +
+            '有任何問題都可以繼續問我。',
+          reasoning: ''
+        });
+        scrollInsight();
+        return;
+      }
       state.insight.messages.push({ role: 'user', text });
       state.insight.input = ''; state.insight.loading = true; state.insight.pendingText = text;
       const myGen = ++state.insight.gen;
@@ -2144,7 +2716,7 @@ createApp({
           messages.push({
             role: 'system',
             content: '使用者目前畫面上呈現的圖表內容如下（僅供你判斷可標記哪些世代/分組，內容不代表完整資料）：\n'
-              + chartSummaryText(state.lastChartPayload, state.fieldsMeta)
+              + getChartSummaryForAI()
           });
         }
         history.forEach(h => messages.push({ role: h.role === 'model' ? 'assistant' : 'user', content: String(h.text || '') }));
@@ -2210,34 +2782,34 @@ createApp({
     // ---- 文案池（純前端寫死，不呼叫 API；每次隨機挑一套/一句）----
     const GREETINGS = [
       ['嗨，我是這個網站的 AI 助教。',
-       '先自我介紹一下這裡在做什麼：我們手上有台灣國家安全調查（TNSS）16 年份的民調資料，從本省閩南、客家、外省到原住民都有涵蓋。',
-       '你可以把這裡想成一個提問工具——想知道不同族群、不同世代的台灣人，對台灣社會的一些重要議題各自怎麼想，都可以從這份資料裡挖出來看。',
-       '資料我已經幫你準備好了，隨時可以開始。'],
+       '先自我介紹一下這裡在做什麼：我們手上有 Duke 大學牛銘實教授主持的台灣國家安全調查（TNSS），累積了 16 年份的民調資料。',
+       '這項調查始於 2002 年，目的是系統性追蹤台灣民眾對國家安全、兩岸關係的看法——這些民意對政策走向有重大影響。',
+       '資料開放給學術界使用，至今已支持數十篇研究發表。從閩南、客家、外省到原住民都有涵蓋，我們可以直接開始。'],
       ['哈囉，歡迎來到「台灣的族群政治」。',
-       '這裡的資料來自台灣國家安全調查（TNSS），跨了 16 個年度，涵蓋本省閩南、客家、外省、原住民等不同族群的受訪者。',
-       '簡單說，這是一個讓你自己動手挖資料的地方：選個年度、選個議題，就能看到不同族群、不同世代的台灣人怎麼想。',
-       '功課我已經幫你做完了——資料都下載整理好了，我們可以直接開始。'],
+       '這裡的資料來自台灣國家安全調查（TNSS），是 Duke 大學牛銘實教授自 2002 年起發起的長期研究。',
+       '發起這項調查的原因很簡單：台灣的民意對兩岸關係與國家安全走向有關鍵影響，值得長期系統性地追蹤。',
+       '研究團隊秉持學術開放精神，把資料公開給全球學者使用，已有數十篇論文以此為基礎發表。我們開始吧。'],
       ['你好，我是負責帶你逛這份資料的 AI 助教。',
-       '這份資料庫記錄了台灣過去 16 個年度的民意調查，受訪者橫跨各個族群與世代。',
-       '你可以把我們接下來要做的事，想成是在問資料一個個問題：「這個世代的人怎麼看？」「不同族群之間差在哪裡？」',
-       '不用擔心資料要去哪裡找，都已經準備好放在這裡了，隨時可以開始。'],
+       '這份資料來自 Duke 大學牛銘實教授主持的台灣國家安全調查，從 2002 年開始追蹤台灣民眾對國安與兩岸議題的看法。',
+       '秉持學術開放精神，資料完全公開，已有數十篇國際論文以此為基礎發表。',
+       '你可以把接下來要做的事，想成是在問資料問題：「這個世代怎麼看？」「族群之間差在哪？」我們開始吧。'],
       ['嗨！歡迎使用「台灣的族群政治」資料探索工具。',
-       '背後的資料是 Duke 大學做的台灣國家安全調查，累積了 16 年份，受訪者包含本省閩南、客家、外省、原住民等各種族群背景。',
-       '等一下你可以自己選資料，也可以直接跟我聊、讓我幫你找——目標都是同一個：看看不同族群、不同世代的台灣人，關心的重點有什麼不一樣。',
-       '資料已經在這裡準備好了，我們開始吧。'],
+       '背後的資料是 Duke 大學牛銘實教授自 2002 年起主持的台灣國家安全調查（TNSS）。',
+       '這項研究的初衷是：台灣民眾對國家安全、兩岸關係的看法，深刻影響著政策選擇，需要長期追蹤。',
+       '資料完全公開，讓各地學者都能用來做研究——目前已有 40 多篇學術論文引用。我們開始吧。'],
       ['哈囉，我是這裡的 AI 小幫手。',
-       '先講講背景：這是一份跨 16 個年度的全國性民意調查（TNSS），受訪者組成涵蓋台灣各個族群，時間跨度也夠長，可以看世代差異。',
-       '你等一下要做的事，其實就是挑一個角度切進去看——某個族群、某個世代，對某些議題的想法。',
-       '資料我已經整理好放著了，不用等，我們可以直接開始。']
+       '先講講背景：這份全國性民意調查（TNSS）由 Duke 大學牛銘實教授自 2002 年起主持，追蹤的是台灣民眾對國家安全與兩岸關係的看法。',
+       '研究團隊把資料開放出來，讓全球學者都能使用，至今已催生數十篇學術發表。',
+       '累積了 16 個年度、涵蓋各族群，我們可以直接開始。']
     ];
     const GREETING_EGG = ['（清清嗓子）哈囉，資料介紹我已經講了不知道第幾次了，今天講簡短版。',
-      '台灣國家安全調查，16 年份，各族群都有涵蓋，族繁不及備載。',
+      'Duke 大學牛銘實教授主持、從 2002 年開始的台灣國家安全調查，16 年份，各族群都有涵蓋，資料開放、論文一堆。',
       '老實說，比起我，這份資料庫話還比較多——它已經默默記錄台灣人怎麼想，記了超過二十年。',
       '好了，正經的部分講完了，我們開始吧。'];
     const POOLS = {
-      S1: ['你想怎麼開始？跟我聊，還是你想自己動手？兩種我都奉陪。',
-           '選個開場方式吧——用嘴巴指揮我，還是親自下海選？',
-           '第一步：你要當甩手掌櫃（跟我聊），還是親自操刀（自己選）？'],
+      S1: ['第一次來？先看個 DEMO 暖暖身，還是直接上場？',
+           '想先看看這裡能幹嘛，還是已經迫不及待要開挖了？',
+           '新手村有 DEMO 可以逛，老司機請自便。'],
       S6: ['分析看完啦，接下來呢？想考考學生，還是再多聊幾句？',
            '這張圖先分析到這——要出題驗收一下，還是我們再多挖一點？',
            '分析告一段落，準備出題了嗎？還是這張圖你還沒問夠？'],
@@ -2263,7 +2835,7 @@ createApp({
     // 長字串先處理（先換成佔位 token），避免短字串又去比對到已經包好的區段造成重複包。
     function linkifySource(text) {
       const url = state.sourceUrl;
-      const phrases = ['Duke 大學做的台灣國家安全調查', '台灣國家安全調查（TNSS）', '全國性民意調查（TNSS）', '台灣國家安全調查', '這份資料庫']
+      const phrases = ['Duke 大學牛銘實教授主持的台灣國家安全調查（TNSS）', 'Duke 大學牛銘實教授主持的台灣國家安全調查', 'Duke 大學做的台灣國家安全調查', '台灣國家安全調查（TNSS）', '全國性民意調查（TNSS）', '台灣國家安全調查', '這份資料庫']
         .sort((a, b) => b.length - a.length);
       let out = text; const tokens = [];
       phrases.forEach((ph, i) => {
@@ -2405,8 +2977,86 @@ createApp({
       });
     }
 
-    // ---- S2：資料選取（兩條路徑）----
+    // 終端機專用：在最近一張圖表上套用 highlight（紅圈動畫）
+    function applyTermChartHighlight(cohort, group) {
+      const chartLines = state.term.log.filter(l => l.kind === 'chart');
+      if (!chartLines.length) return;
+      const line = chartLines[chartLines.length - 1];
+      const el = chartEls[line.id];
+      if (!el) return;
+      const sel = d3.select(el);
+      const matches = (node) => node.getAttribute('data-cohort') === cohort
+        && (!group || node.getAttribute('data-group') === group);
+      // 折線圖圓點
+      sel.selectAll('circle.chart-point').each(function () {
+        if (!matches(this)) return;
+        const c = d3.select(this);
+        d3.select(this.parentNode).append('circle')
+          .attr('class', 'point-highlight')
+          .attr('cx', c.attr('cx')).attr('cy', c.attr('cy')).attr('r', 8)
+          .attr('fill', 'none').attr('stroke', '#e74c3c').attr('stroke-width', 2.5)
+          .attr('stroke-opacity', 1)
+          .transition().duration(2600).attr('r', 15).attr('stroke-opacity', 0).remove();
+      });
+      // 長條圖
+      sel.selectAll('rect.chart-bar').each(function () {
+        if (!matches(this)) return;
+        d3.select(this).classed('bar-highlighted', true);
+        setTimeout(() => d3.select(this).classed('bar-highlighted', false), 2600);
+      });
+    }
+    function clearTermChartHighlights() {
+      const chartLines = state.term.log.filter(l => l.kind === 'chart');
+      if (!chartLines.length) return;
+      const line = chartLines[chartLines.length - 1];
+      const el = chartEls[line.id];
+      if (!el) return;
+      const sel = d3.select(el);
+      sel.selectAll('.point-highlight').remove();
+      sel.selectAll('.chart-bar').classed('bar-highlighted', false);
+      sel.selectAll('.chart-point').classed('group-highlighted', false);
+      sel.selectAll('.chart-line').classed('line-highlighted', false);
+    }
+    // 終端機專用：標記整個 group 的所有資料點＋線段（持久）+ 跳繩動畫
+    function applyTermChartGroupHighlight(group) {
+      const chartLines = state.term.log.filter(l => l.kind === 'chart');
+      if (!chartLines.length) return;
+      const line = chartLines[chartLines.length - 1];
+      const el = chartEls[line.id];
+      if (!el) return;
+      const sel = d3.select(el);
+      sel.selectAll('circle.chart-point').each(function () {
+        if (this.getAttribute('data-group') === group) {
+          d3.select(this).classed('group-highlighted', true);
+        }
+      });
+      sel.selectAll('rect.chart-bar').each(function () {
+        if (this.getAttribute('data-group') === group) {
+          d3.select(this).classed('bar-highlighted', true);
+        }
+      });
+      sel.selectAll('path.chart-line').each(function () {
+        if (this.getAttribute('data-group') === group) {
+          d3.select(this).classed('line-highlighted', true);
+          jumpRopeLine(d3.select(this));
+        }
+      });
+    }
+
+    // ---- S2：資料選取（兩條路徑＋DEMO）----
     async function ensureYearLoaded() { if (!state.rows.length) await loadYear(); }
+    // DEMO 模式：隨機年份 + 父親省籍欄位，展示「父親來自大陸各省者的年齡分布」
+    async function stepDemo() {
+      const randomYear = state.years[Math.floor(Math.random() * state.years.length)];
+      state.year = randomYear;
+      state.selectedFields = ['father_ethnicity'];
+      state.fieldFilters = {};
+      await loadYear();
+      await pushText('sys', '好，讓我隨機挑一個年份給你看看。', '●');
+      await pushText('sys', '這是 ' + randomYear + ' 年的資料，顯示的是「父親省籍」在各世代的分布。', '●');
+      await pushText('sys', '你可以觀察「大陸各省市人」這條線——隨著世代推移，比例有什麼變化？', '●');
+      pushChartBubble();
+    }
     // S2b：UI 選單泡泡
     function stepUiSelect() {
       const sel = pushLine({ kind: 'selector', done: false });
@@ -2460,17 +3110,75 @@ createApp({
         state.term._dataChanged = true;
         return { ok: true, fields };
       }
-      if (name === 'highlightDataPoint' || name === 'clearHighlights') return { ok: true };
+      if (name === 'highlightDataPoint') {
+        const cohort = String(args.cohort || '');
+        const group = args.group ? String(args.group) : null;
+        applyTermChartHighlight(cohort, group);
+        return { ok: true, cohort, group };
+      }
+      if (name === 'clearHighlights') {
+        clearTermChartHighlights();
+        return { ok: true };
+      }
+      if (name === 'highlightGroup') {
+        const group = String(args.group || '');
+        applyTermChartGroupHighlight(group);
+        return { ok: true, group };
+      }
+      if (name === 'addGuideLine') {
+        const cohort = String(args.cohort || '');
+        if (!state.guideLines.includes(cohort)) state.guideLines = [...state.guideLines, cohort];
+        redrawTermCharts();
+        const slice = getSliceAtCohort(cohort);
+        return { ok: true, cohort, slice };
+      }
+      if (name === 'clearGuideLines') {
+        state.guideLines = [];
+        redrawTermCharts();
+        return { ok: true };
+      }
+      if (name === 'overview') {
+        const years = (args.years || []).map(String);
+        const fields = args.fields ? args.fields.map(String) : state.fieldsMeta.map(f => f.field);
+        const results = [];
+        for (const year of years) {
+          let data = state.playback.preloadedData[year];
+          if (!data) data = await api.getYearData(year);
+          const cols = data.columns;
+          const rows = data.rows.map(r => { const o = {}; cols.forEach((c, i) => o[c] = r[i]); return o; });
+          const fieldSummaries = fields.map(field => {
+            const bd = buildBreakdownWith(rows, [field]);
+            return { field, label: fieldLabelFrom(state.fieldsMeta, field), cohorts: bd.cohorts,
+              series: bd.series.map(s => ({ group: s.group, points: s.points.map(p => ({ cohort: p.cohort, pct: p.pct, n: p.n })) })) };
+          });
+          results.push({ year, totalSamples: rows.length, fields: fieldSummaries });
+        }
+        return { years: results };
+      }
+      if (name === 'askChoice') {
+        const question = String(args.question || '請選擇');
+        const options = (args.options || []).map(String);
+        const allowOther = !!args.allowOther;
+        if (options.length < 2) return { error: '至少需要兩個選項' };
+        const allOpts = allowOther ? [...options, '其他（自行輸入）'] : options;
+        const choice = await awaitMenu(question, allOpts.map(o => ({ label: o })));
+        if (allowOther && choice === options.length) {
+          // 選了「其他」，啟用文字輸入
+          const otherText = await awaitInput('請輸入：', { allowEmpty: false });
+          return { chosenIndex: choice, chosenOption: otherText, isOther: true, otherText };
+        }
+        return { chosenIndex: choice, chosenOption: options[choice] };
+      }
       return { error: '未知函式：' + name };
     }
     async function stepInsightSelect() {
       // 多輪對話：一直聊到 AI 真的挑好年度＋欄位、畫出圖為止；中途可隨時改用選單自己挑。
       const messages = [{ role: 'system', content: INSIGHT_SYSTEM_PROMPT }];
-      if (state.lastChartPayload) messages.push({ role: 'system', content: '目前圖表內容：\n' + chartSummaryText(state.lastChartPayload, state.fieldsMeta) });
+      if (state.lastChartPayload) messages.push({ role: 'system', content: '目前圖表內容：\n' + getChartSummaryForAI() });
       let first = true;
       while (true) {
         const q = await awaitInput(first
-          ? '想看什麼資料？例如「2025 年不同族群的統獨立場」（可以先問我有哪些年份／欄位）'
+          ? '你可以問我這份資料能看出什麼，或者說說你對台灣不同族群的看法，我會從資料中展示不同世代各族群的觀點統計'
           : '再跟我說清楚一點：想看哪一年、哪個欄位？');
         first = false;
         messages.push({ role: 'user', content: q });
@@ -2490,17 +3198,20 @@ createApp({
         state.term._analysisMsgs = [
           { role: 'system', content: state.settings.defaultPrompt }, { role: 'system', content: TOPIC_GUARD },
           { role: 'system', content: [
-            '使用者正在看一張圖表並跟你討論。你可以做兩件事：',
+            '使用者正在看一張圖表並跟你討論。你可以做以下幾件事：',
             '(1) 分析：依使用者角度做 150 字內的客觀中文描述；',
-            '(2) 調整資料：使用者若要求「只看某類別／某族群」「換成看…欄位」「改看某年」等，',
-            '    請呼叫 setFieldFilter（用 values 指定要保留的類別值）／setSelectedFields／setSelectedYear',
-            '    實際套用到畫面上的圖表，不要只用文字描述；套用後簡短說明你調整了什麼。',
+            '(2) 回答查詢：使用者若問「有哪些年份／欄位／類別可選」，呼叫 listYears / listFields / listFieldValues 查詢後回答；',
+            '(3) 驗證假設：使用者若提出關於族群或世代的假設（如「外省人是不是比較偏統」），',
+            '    請用 getCohortBreakdown 取得對應數據，配合 setSelectedFields 畫圖展示，再簡要說明資料是否支持假設；',
+            '(4) 調整資料：使用者若要求「只看某類別／某族群」「換成看…欄位」「改看某年」等，',
+            '    請呼叫 setFieldFilter／setSelectedFields／setSelectedYear 實際套用到圖表，套用後簡短說明調整了什麼。',
+            '(5) 標記資料點：說明特定世代或分組時，可呼叫 highlightDataPoint 在圖表上標記出來，讓文字與視覺呼應。',
             '欄位參數一律用英文欄位名（listFields 回傳的 field）。'
           ].join('\n') }
         ];
       }
       const msgs = state.term._analysisMsgs;
-      const summary = chartSummaryText(state.lastChartPayload, state.fieldsMeta);
+      const summary = getChartSummaryForAI();
       msgs.push({ role: 'user', content: '【目前圖表資料摘要】\n' + summary + '\n\n【使用者的話】\n' + (direction || '（請客觀描述整體分佈）') });
       state.term._dataChanged = false;
       await runAILine(msgs, insightToolDeclarations(), dispatchInsightToolTerm, 1000);
@@ -2521,9 +3232,9 @@ createApp({
         '把整題放進一個 ``` code block 裡，除此之外不要有其他文字。'
       ];
       if (tq.items.length) parts.push('', '=== 已出過的題目（避免重複） ===', tq.items.map(it => '第 ' + it.num + ' 題：' + it.display).join('\n'));
-      parts.push('', '=== 圖表資料摘要 ===', chartSummaryText(state.lastChartPayload, state.fieldsMeta));
+      parts.push('', '=== 圖表資料摘要 ===', getChartSummaryForAI());
       const messages = [{ role: 'system', content: state.settings.defaultPrompt }, { role: 'system', content: TOPIC_GUARD }, { role: 'user', content: parts.join('\n') }];
-      const res = await runAILine(messages, null, null, 1200, { suppressContent: true, doneText: '（已出好第 ' + qNum + ' 題 ↓）' });
+      const res = await runAILine(messages, null, null, 2000, { suppressContent: true, doneText: '（已出好第 ' + qNum + ' 題 ↓）' });
       if (!res.content || !res.content.trim()) return;
       const cleaned = extractCodeBlock(res.content);
       const { display, answer } = splitAnswerKey(cleaned);
@@ -2550,10 +3261,10 @@ createApp({
         '選項或敘述是否有爭議或跟資料不符、正確答案是否合理、選項用詞是否可能洩漏答案等。這是給老師的審題建議，不是幫學生批改，直接給建議、不要客套。',
         '', '=== 題型 ===', item.qtype, '', '=== 出題指標 ===', item.objective || '（未指定）',
         '', '=== 評量尺標 ===', item.rubric || '（未指定）', '', '=== 題目本文 ===', reviewSubject,
-        '', '=== 圖表資料摘要 ===', chartSummaryText(state.lastChartPayload, state.fieldsMeta)].join('\n');
+        '', '=== 圖表資料摘要 ===', getChartSummaryForAI()].join('\n');
       const messages = [{ role: 'system', content: state.settings.defaultPrompt }, { role: 'system', content: TOPIC_GUARD }, { role: 'user', content: userText }];
       try {
-        const res = await runToolLoop(messages, null, null, 1000, d => { ln.reviewReasoning = d.reasoning || ''; });
+        const res = await runToolLoop(messages, null, null, 1500, d => { ln.reviewReasoning = d.reasoning || ''; });
         ln.review = (res.content && res.content.trim()) ? res.content : '（AI 只輸出了思考過程，沒有給出審題建議）';
         ln.reviewReasoning = res.reasoning || '';
       } catch (e) { ln.review = '（AI 審題失敗：' + (e.message || e) + '）'; }
@@ -2708,8 +3419,12 @@ createApp({
     // ---- 一個完整週期 S0–S14 ----
     async function runCycle() {
       for (const l of pickGreeting()) await pushText('sys', l, '●', linkifySource(l)); // S0（資料庫字樣帶連結）
-      const mode = await awaitMenu(pick(POOLS.S1), [{ label: '跟我聊（用問的）' }, { label: '我自己選' }]); // S1
-      if (mode === 0) await stepInsightSelect(); else await stepUiSelect();       // S2 → S3 出圖
+      const mode = await awaitMenu(pick(POOLS.S1), [
+        { label: '先看 DEMO（懶人首選）' },
+        { label: '跟 AI 聊（動嘴不動手）' },
+        { label: '我自己來（硬派玩家）' }
+      ]); // S1
+      if (mode === 0) await stepDemo(); else if (mode === 1) await stepInsightSelect(); else await stepUiSelect(); // S2 → S3 出圖
       state.term._analysisMsgs = null;                                           // 每輪重置分析對話
       while (true) {                                                              // S4–S6 分析迴圈
         const dir = await awaitInput('想從這張圖看到什麼？也可以要我調整資料（例：只看外省人、改看政黨認同、換 2020 年）');
@@ -2880,7 +3595,9 @@ createApp({
       // 終端機版
       quizTypes, rateIcons, rateVoidIcon, setLineRef, setChartRef,
       onTermEnter, onMenuPick, skipBoot, toggleUiMode, restartTerm, exportExcel, exportSvg,
-      selectorConfirm, openFilterDialogTerm, teacherFormSubmit, aiQuizTypePick, onRateChange, regradeFromRate
+      selectorConfirm, openFilterDialogTerm, teacherFormSubmit, aiQuizTypePick, onRateChange, regradeFromRate,
+      // 多年度播放
+      onYearsChange, playbackToggle, playbackPrev, playbackNext
     };
   }
 }).use(ElementPlus).mount('#app');
