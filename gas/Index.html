@@ -6,6 +6,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Noto+Sans+TC:wght@400;500;700&display=swap">
 <style>
+  [v-cloak] { display: none; }
   :root { --wai: #c0392b; --minnan: #2e86de; --hakka: #27ae60; --abo: #8e44ad; }
   * { box-sizing: border-box; }
   body { margin: 0; font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
@@ -60,7 +61,7 @@
     80% { transform: translateX(1px); }
   }
   @media (prefers-reduced-motion: reduce) {
-    .group-highlighted, .bar-highlighted, .line-highlighted { animation: none; }
+    body:not(.force-motion) .group-highlighted, body:not(.force-motion) .bar-highlighted, body:not(.force-motion) .line-highlighted { animation: none; }
   }
   .filter-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   .filter-chip { display: inline-flex; align-items: center; gap: 4px; background: #f4f6f8;
@@ -158,7 +159,7 @@
     97.5% { transform: translate(0, 1px) skewX(-0.05deg); }
     98% { transform: translate(0,0) skewX(0); }
   }
-  @media (prefers-reduced-motion: reduce) { .term::before, .term { animation: none; } }
+  @media (prefers-reduced-motion: reduce) { body:not(.force-motion) .term::before, body:not(.force-motion) .term { animation: none; } }
 
   /* RGB 色散效果：模擬 CRT 的紅綠藍像素錯位 */
   .term-log {
@@ -185,7 +186,7 @@
     96% { opacity: .1; background-position: -5px 12px; }
     97% { opacity: 0; }
   }
-  @media (prefers-reduced-motion: reduce) { .term-noise { display: none; } }
+  @media (prefers-reduced-motion: reduce) { body:not(.force-motion) .term-noise { display: none; } }
 
   /* 水平撕裂線：偶發的訊號干擾 */
   .term-tear {
@@ -201,7 +202,7 @@
     96% { opacity: .8; top: 67%; transform: scaleX(0.98); }
     96.5% { opacity: 0; top: 68%; }
   }
-  @media (prefers-reduced-motion: reduce) { .term-tear { display: none; } }
+  @media (prefers-reduced-motion: reduce) { body:not(.force-motion) .term-tear { display: none; } }
 
   .term-head {
     flex: none; display: flex; align-items: center; justify-content: space-between;
@@ -222,12 +223,12 @@
   .tline.role-user { color: var(--term-user); }
   .tline.role-user .pfx { color: var(--term-user); }
   .tline.role-sys .pfx { color: var(--term-fg); }      /* ● 純腳本/選單 */
-  .tline.role-ai  .pfx { }                               /* 🤖 真呼叫 AI */
+  .tline.role-ai  .pfx { }                               /* fa-robot 圖示：真呼叫 AI */
   .tline.role-err { color: #ff6b6b;
     text-shadow: 0 0 1px #ff6b6b, 0 0 3px rgba(255,80,80,.6), 0 0 8px rgba(255,80,80,.3);
     animation: err-flicker 2s infinite; }
   @keyframes err-flicker { 0%,90%,100%{opacity:1} 92%{opacity:.7} 95%{opacity:.9} }
-  @media (prefers-reduced-motion: reduce) { .tline.role-err { animation: none; } }
+  @media (prefers-reduced-motion: reduce) { body:not(.force-motion) .tline.role-err { animation: none; } }
 
   /* 思考流：呼叫中即時顯示、結束後摺疊成一行 */
   .tthink { border-left: 2px solid var(--term-faint); padding: 2px 0 2px 10px; margin: 0 0 6px;
@@ -331,7 +332,7 @@
     50% { opacity: .9; transform: translateX(1px) skewX(0.3deg); }
     75% { opacity: .7; transform: translateX(-1px); }
   }
-  @media (prefers-reduced-motion: reduce) { .boot-crt-on, .boot-flicker { animation: none; } }
+  @media (prefers-reduced-motion: reduce) { body:not(.force-motion) .boot-crt-on, body:not(.force-motion) .boot-flicker { animation: none; } }
 
   /* 哭臉→笑臉評分列 */
   .term .trate-faces { display: flex; gap: 8px; }
@@ -340,7 +341,7 @@
   .egg-sad { animation: egg-sad .5s ease; }
   @keyframes egg-cheer { 0%,100%{transform:translateY(0)} 30%{transform:translateY(-8px)} 60%{transform:translateY(-3px)} }
   @keyframes egg-sad { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-4px)} 75%{transform:translateX(4px)} }
-  @media (prefers-reduced-motion: reduce) { .egg-cheer,.egg-sad { animation: none; } }
+  @media (prefers-reduced-motion: reduce) { body:not(.force-motion) .egg-cheer, body:not(.force-motion) .egg-sad { animation: none; } }
 
   /* 讓 Element Plus 表單元件在終端機表單裡不要太亮眼（S7b 老師出題表單） */
   .tbox .el-textarea__inner, .tbox .el-input__wrapper, .tbox .el-select__wrapper {
@@ -413,7 +414,7 @@
   /* 選單被選時：反白閃爍動畫，再落定在選取樣式 */
   @keyframes menu-flash { 0%,100% { background: rgba(51,255,102,.16); color: var(--term-fg); } 50% { background: var(--term-fg); color: #000; } }
   .term .tmenu-opt.sel { animation: menu-flash .16s steps(1) 4; background: rgba(51,255,102,.16); }
-  @media (prefers-reduced-motion: reduce) { .term .tmenu-opt.sel { animation: none; } }
+  @media (prefers-reduced-motion: reduce) { body:not(.force-motion) .term .tmenu-opt.sel { animation: none; } }
 
   /* 螢光掃描線：一條亮帶在整個螢幕上不規則游走（feels random） */
   .term-scan { position: absolute; left: 0; right: 0; height: 130px; pointer-events: none; z-index: 5;
@@ -423,7 +424,7 @@
     0% { top: -18%; opacity: .35; } 12% { opacity: .9; } 26% { top: 58%; } 38% { top: 12%; opacity: .5; }
     52% { top: 88%; opacity: .85; } 67% { top: 30%; } 81% { top: 70%; opacity: .6; } 100% { top: 112%; opacity: .35; }
   }
-  @media (prefers-reduced-motion: reduce) { .term-scan { animation: none; opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { body:not(.force-motion) .term-scan { animation: none; opacity: 0; } }
 </style>
 
 <div id="app" v-cloak>
@@ -523,7 +524,7 @@
     <div class="source-link">
       資料來源：<a :href="sourceUrl" target="_blank">Taiwan National Security Survey (Duke University)</a>
       · 族群以「父親省籍」為代理變項，非受訪者自陳認同。
-      <span class="credit">· © Kelunyang@2026 · <a href="https://github.com/kelunyang/demo-question-terminal" target="_blank" rel="noopener">GitHub</a></span>
+      <span class="credit">· © Kelunyang@2026 · <a href="https://github.com/kelunyang/demo-question-terminal" target="_blank" rel="noopener" title="GitHub" aria-label="GitHub"><i class="fa-brands fa-github"></i></a></span>
     </div>
   </div>
 
@@ -719,7 +720,7 @@
       <div class="rate-row">
         <span>對這次批改滿意嗎？</span>
         <span v-for="n in 5" :key="n" class="rate-face" :class="{active: quiz.humanRate === n}" @click="quiz.humanRate = n">
-          {{ ['😭','🙁','😐','🙂','😄'][n-1] }}
+          <i :class="rateIcons[n-1]"></i>
         </span>
       </div>
 
@@ -795,7 +796,7 @@
     <div class="term-scan" aria-hidden="true"></div>
     <div class="term-tear" aria-hidden="true"></div>
     <div class="term-head">
-      <span><span class="dot">●</span>&nbsp; TNSS-TERMINAL · 台灣的族群政治 <span class="credit">· © Kelunyang@2026 · <a href="https://github.com/kelunyang/demo-question-terminal" target="_blank" rel="noopener">GitHub</a></span></span>
+      <span><span class="dot">●</span>&nbsp; TNSS-TERMINAL · 台灣的族群政治 <span class="credit">· © Kelunyang@2026 · <a href="https://github.com/kelunyang/demo-question-terminal" target="_blank" rel="noopener" title="GitHub" aria-label="GitHub"><i class="fa-brands fa-github"></i></a></span></span>
       <span><i class="fa-solid fa-cog" @click="openSettings" title="設定"></i></span>
     </div>
 
@@ -809,13 +810,12 @@
             ▸ 思考過程（{{ ln.showReasoning ? '收合' : '點此展開' }}）
           </div>
           <div v-if="!ln.thinking && ln.reasoning && ln.showReasoning" class="tthink">{{ ln.reasoning }}</div>
-          <div><span class="pfx">🤖</span><span class="md" v-html="md(ln.text)"></span><span
-            v-if="ln.typing" class="blink">▊</span></div>
+          <div><span class="pfx"><i class="fa-solid fa-robot"></i></span><span class="md" v-html="md(withCursor(ln.text, ln.typing))"></span></div>
         </template>
 
         <!-- 純文字 log（系統腳本／選單前言／使用者輸入／錯誤）；打字中顯示純文字，打完若有連結版就換成 html -->
         <template v-else-if="ln.kind==='text'">
-          <span class="pfx" v-if="ln.pfx">{{ ln.pfx }}</span><span
+          <span class="pfx" v-if="ln.pfx" v-html="ln.pfx"></span><span
             v-if="ln.typing || !ln.html">{{ ln.text }}</span><span v-else v-html="ln.html"></span><span
             v-if="ln.typing" class="blink">▊</span>
         </template>
@@ -829,6 +829,7 @@
             <div v-if="ln.text"><span class="pfx">●</span><span>{{ ln.text }}</span></div>
             <div class="tmenu tbox" style="border:none;box-shadow:none">
               <div class="tmenu-opt" v-for="(opt,oi) in ln.options" :key="oi"
+                :class="{sel: ln.selectedIdx === oi, disabled: ln.selectedIdx != null && ln.selectedIdx !== oi}"
                 @click="onMenuPick(ln, oi)">
                 <span class="k">[{{ oi+1 }}]</span>{{ opt.label }}
               </div>
@@ -952,6 +953,7 @@
               <div class="tbox-title">┌─ 選題型（出題方向可先打在下面輸入框，選填）</div>
               <div class="tbox-body tmenu">
                 <div class="tmenu-opt" v-for="(t,ti) in quizTypes" :key="ti"
+                  :class="{sel: ln.selectedType === t, disabled: ln.selectedType != null && ln.selectedType !== t}"
                   @click="aiQuizTypePick(ln, t)">
                   <span class="k">[{{ ti+1 }}]</span>{{ t }}
                 </div>
@@ -970,7 +972,7 @@
                 ▸ AI 審題建議（{{ ln.showReview ? '收合' : '點此展開' }}）
               </div>
               <div v-if="ln.teacherMade && ln.review && ln.showReview" class="tthink md" v-html="md(ln.review)"></div>
-              <div v-if="ln.teacherMade && ln.reviewLoading" class="tthink">🤖 審題中… {{ ln.reviewReasoning }}</div>
+              <div v-if="ln.teacherMade && ln.reviewLoading" class="tthink"><i class="fa-solid fa-robot"></i> 審題中… {{ ln.reviewReasoning }}</div>
               <div v-if="ln.options" class="tmenu" style="margin-top:8px">
                 <div class="tmenu-opt" v-for="o in ln.options" :key="o.label"
                   :class="{sel: ln.answer === o.label, disabled: ln.answered}"
@@ -993,7 +995,7 @@
                 ▸ 思考過程（{{ ln.showReasoning ? '收合' : '點此展開' }}）
               </div>
               <div v-if="ln.reasoning && ln.showReasoning" class="tthink">{{ ln.reasoning }}</div>
-              <div class="md" v-html="md(ln.text)"></div><span v-if="ln.typing" class="blink">▊</span>
+              <div class="md" v-html="md(withCursor(ln.text, ln.typing))"></div>
             </div>
           </div>
         </template>
@@ -1001,7 +1003,7 @@
         <!-- S12：滿意度評分：選完後只顯示選中的表情 -->
         <template v-else-if="ln.kind==='rate'">
           <template v-if="ln.done && ln.rate">
-            <div class="tline role-user"><span class="pfx">▸</span><span>評分：{{ ['😭','🙁','😐','🙂','😄'][ln.rate-1] }}</span></div>
+            <div class="tline role-user"><span class="pfx">▸</span><span>評分：<i :class="rateIcons[ln.rate-1]"></i></span></div>
           </template>
           <template v-else-if="ln.done && !ln.rate">
             <div class="tline role-user"><span class="pfx">▸</span><span>請求重新批改</span></div>
@@ -1012,7 +1014,7 @@
               <div class="tbox-body">
                 <div class="trate-faces">
                   <span v-for="n in 5" :key="n" class="rate-face" :class="{active: ln.rate===n}"
-                    @click="onRateChange(ln, n)">{{ ['😭','🙁','😐','🙂','😄'][n-1] }}</span>
+                    @click="onRateChange(ln, n)"><i :class="rateIcons[n-1]"></i></span>
                 </div>
                 <div style="margin-top:8px">
                   <el-button size="small" @click="regradeFromRate(ln)">
@@ -1029,7 +1031,7 @@
 
     <div class="term-input">
       <div class="term-prompt">
-        <span class="caret">❯</span>
+        <span class="caret"><i class="fa-solid fa-angle-right"></i></span>
         <textarea class="term-ta" ref="termTa" rows="1" v-model="term.input"
           :disabled="!term.inputEnabled"
           :placeholder="term.inputEnabled ? term.placeholder : '（請由上方選單操作…）'"
@@ -1067,6 +1069,12 @@
       </el-form-item>
       <el-form-item label="預設 Prompt（圖表描述／出題／批改共用，可編輯）">
         <el-input v-model="settings.defaultPrompt" type="textarea" :rows="8" ></el-input>
+      </el-form-item>
+      <el-form-item label="顯示效果">
+        <el-switch v-model="forceAnimation" active-text="強制播放動畫" inactive-text="尊重系統減少動態效果設定" />
+        <div style="color:#909399;font-size:12px;margin-top:6px">
+          預設會尊重你系統／瀏覽器的「減少動態效果」偏好，開機動畫、終端機打字機效果會直接跳過；開啟這個開關可以強制看到完整效果。這個設定只存在你自己的瀏覽器，不會影響其他使用者。
+        </div>
       </el-form-item>
     </el-form>
     <template #footer>
@@ -1751,6 +1759,8 @@ createApp({
       teacherQuiz: { questionType: '四選一選擇題', objective: '', rubric: '' }, // 題目本文交給 EasyMDE 管理，不放進 reactive state
       settingsDialog: false,
       settings: { defaultPrompt: '', modelTier: 'flash', saving: false },
+      // 個人顯示偏好，只存本機 localStorage，不跟後端 Script Properties 同步（不是全站共用設定）
+      forceAnimation: localStorage.getItem('tnss_force_animation') !== '0',
       // ---- 分析報告選項 ----
       autoAnalysis: true,          // true = 自動生成分析報告；false = 使用者輸入分析方向
       analysisPrompt: '',          // 使用者自訂的分析方向（autoAnalysis=false 時使用）
@@ -2939,8 +2949,14 @@ createApp({
     // 終端機版控制器（uiMode==='terminal'）：S0–S15 狀態機 + timeline，
     // 底層一律複用既有的 runToolLoop / renderChartInto / chartSummaryText / api.* 等函式。
     // ============================================================
-    const reducedMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-    function sleep(ms) { return new Promise(r => setTimeout(r, reducedMotion ? 0 : ms)); }
+    const systemPrefersReducedMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    // 預設尊重系統的「減少動態效果」；使用者可在設定面板用「強制播放動畫」開關覆蓋
+    const reducedMotion = Vue.computed(() => systemPrefersReducedMotion && !state.forceAnimation);
+    Vue.watchEffect(() => {
+      document.body.classList.toggle('force-motion', state.forceAnimation);
+      localStorage.setItem('tnss_force_animation', state.forceAnimation ? '1' : '0');
+    });
+    function sleep(ms) { return new Promise(r => setTimeout(r, reducedMotion.value ? 0 : ms)); }
     function nextTermId() { return 't' + (++state.term.seq); }
     function scrollTerm() { nextTick(() => { const b = termLog.value; if (b) b.scrollTop = b.scrollHeight; }); }
 
@@ -3023,18 +3039,18 @@ createApp({
     }
     async function termType(line, full, cps) {
       full = full || '';
-      if (reducedMotion) { line.text = full; line.typing = false; return; }
+      if (reducedMotion.value) { line.text = full; line.typing = false; return; }
       const step = Math.max(1, Math.round(full.length / 90));
       for (let i = 0; i < full.length; i += step) { line.text = full.slice(0, i); scrollTerm(); await sleep(1000 / (cps || 55) * step); }
       line.text = full; line.typing = false;
     }
     async function pushText(role, text, pfx, html) {
-      const p = pfx != null ? pfx : (role === 'user' ? '❯' : role === 'ai' ? '🤖' : role === 'sys' ? '●' : '');
+      const p = pfx != null ? pfx : (role === 'user' ? '<i class="fa-solid fa-angle-right"></i>' : role === 'ai' ? '<i class="fa-solid fa-robot"></i>' : role === 'sys' ? '●' : '');
       const line = pushLine({ kind: 'text', role, pfx: p, text: '', html: html || null, typing: true });
       await termType(line, text);
       return line;
     }
-    function echoUser(text) { return pushLine({ kind: 'text', role: 'user', pfx: '❯', text, typing: false }); }
+    function echoUser(text) { return pushLine({ kind: 'text', role: 'user', pfx: '<i class="fa-solid fa-angle-right"></i>', text, typing: false }); }
 
     function enableInput(placeholder) {
       state.term.placeholder = placeholder || ''; state.term.inputEnabled = true;
@@ -3061,10 +3077,13 @@ createApp({
       disableInput(); // 選擇型問答：只能點上方選項，下方輸入區停用（避免與選單並存造成困惑）
       return flowWait(res => { state.term.pending = { type: 'menu', line, resolve: res, options }; });
     }
-    function onMenuPick(ln, oi) {
+    async function onMenuPick(ln, oi) {
       const p = state.term.pending;
-      if (!p || p.type !== 'menu' || p.line !== ln) return;
-      ln.done = true; ln.chosen = oi; state.term.pending = null; disableInput();
+      if (!p || p.type !== 'menu' || p.line !== ln || ln.selectedIdx != null) return;
+      state.term.pending = null; disableInput();
+      ln.selectedIdx = oi;
+      await sleep(650); // 讓 .tmenu-opt.sel 的閃爍動畫跑完再收合成單行
+      ln.done = true; ln.chosen = oi;
       p.resolve(oi);
     }
     function onTermEnter() {
@@ -3473,12 +3492,14 @@ createApp({
       enableInput(pick(POOLS.S7));
       return flowWait(res => { ln._resolve = res; });
     }
-    function aiQuizTypePick(ln, t) {
-      if (ln.done) return;
-      ln.done = true; ln.chosen = t;
+    async function aiQuizTypePick(ln, t) {
+      if (ln.done || ln.selectedType != null) return;
       const direction = state.term.input.trim();
-      if (direction) echoUser(direction);
       disableInput();
+      ln.selectedType = t;
+      await sleep(650); // 讓 .tmenu-opt.sel 的閃爍動畫跑完再收合成單行
+      ln.done = true; ln.chosen = t;
+      if (direction) echoUser(direction);
       if (ln._resolve) ln._resolve({ type: t, direction });
     }
 
@@ -3674,7 +3695,8 @@ createApp({
       }
       triggerFlicker(); // 第一波磁場干擾
       const idx = state.boot.lines.push('LOADING DATASET (16 YEARS)...') - 1;
-      await Promise.race([initP.catch(() => { }), sleep(3000)]);
+      // 至少跑滿 1.2 秒的開機戲劇效果，但資料真的慢時最多還是只等 3 秒
+      await Promise.race([Promise.all([initP.catch(() => { }), sleep(1200)]), sleep(3000)]);
       state.boot.lines[idx] += ' OK';
       await sleep(200);
       triggerFlicker(); // 第二波磁場干擾
@@ -3735,9 +3757,9 @@ createApp({
     }
 
     // ---- 物理彩蛋（Matter.js headless；載入失敗則全部退化為無動畫）----
-    const physicsOK = typeof Matter !== 'undefined' && !reducedMotion;
+    const physicsOK = Vue.computed(() => typeof Matter !== 'undefined' && !reducedMotion.value);
     function physicsBump() {
-      if (!physicsOK) return;
+      if (!physicsOK.value) return;
       // 新訊息插入時，最後兩則舊訊息輕輕被頂一下（純 CSS transform 彈簧感，成本低）
       const logs = state.term.log;
       for (let k = Math.max(0, logs.length - 3); k < logs.length - 1; k++) {
@@ -3747,7 +3769,7 @@ createApp({
       }
     }
     async function eggCollapseAll() {
-      if (!physicsOK) { await sleep(0); return; }
+      if (!physicsOK.value) { await sleep(0); return; }
       const logs = [...state.term.log];
       for (let i = 0; i < logs.length; i++) {
         const el = lineEls[logs[i].id]; if (!el) continue;
@@ -3760,6 +3782,9 @@ createApp({
     // ---------- markdown ----------
     function md(t) { return t ? marked.parse(t) : ''; }
     function mdInline(t) { return t ? marked.parse(t) : ''; }
+    // 打字游標塞進 markdown 原始文字最後面再一起 parse，讓 ▊ 落在最後一個字後面（分段/多行時才不會掉到整塊文字下方）
+    const CURSOR_HTML = '<span class="blink">▊</span>';
+    function withCursor(t, typing) { return typing ? (t || '') + CURSOR_HTML : (t || ''); }
 
     // 計算選項
     const yearOptions = Vue.computed(() => state.years.map(y => ({ label: y, value: y })));
@@ -3787,7 +3812,7 @@ createApp({
       ...toRefs(state), svg, insightBody, teacherMdRef, termLog, termTa,
       yearOptions, fieldOptions, emptyChartHint, insightWaitingForFirstToken, hasAnyAnswer,
       onYearChange, onFieldsChange, drawChart, openQuiz, doGenerateQuiz, addNextQuestion, doGradeQuiz,
-      openSettings, doSaveSettings, sendInsight, md, mdInline,
+      openSettings, doSaveSettings, sendInsight, md, mdInline, withCursor,
       autoDescribe, cancelDesc, cancelQuizGen, cancelQuizGrade, cancelInsight, retryInsight,
       onAutoAnalysisChange, triggerManualAnalysis,
       fieldLabel, openFilterDialog, applyFilterDialog, clearFilterDialog, toggleHighlight,
@@ -3803,5 +3828,3 @@ createApp({
   }
 }).use(ElementPlus).mount('#app');
 </script>
-
-<style>[v-cloak]{display:none}</style>
